@@ -16,6 +16,7 @@ plugins instead of in core (#265).
 
 ### Added
 
+- **Baileys engine (minimal slice)** — `ENGINE_TYPE=baileys` now selects a second, browser-free WhatsApp engine built on `@whiskeysockets/baileys` (WebSocket/Noise protocol, no Chromium). This first slice supports linking (QR + pairing code), sending and receiving **text**, recipient resolution, and typing presence; all other operations return HTTP 501 until later slices add a message store. Config: `BAILEYS_AUTH_DIR` (default `./data/baileys`). Proxy is not yet supported on this engine. (#PR)
 - **Plugin capability layer (Tier-2 extension plugins):** scoped `ctx.messages` (`sendText` / `reply`,
   routed through `MessageService` so persistence and the send pipeline are preserved) and read-only
   `ctx.engine` (`getGroupInfo` / `getContacts` / `getContactById` / `checkNumberExists` / `getChats`) on

@@ -45,7 +45,9 @@
     "logout": "Cerrar sesión",
     "refresh": "Actualizar",
     "errorGeneric": "Ha ocurrido un error",
-    "unknownError": "Error desconocido"
+    "unknownError": "Error desconocido",
+    "showApiKey": "Mostrar clave API",
+    "hideApiKey": "Ocultar clave API"
   },
   "theme": {
     "light": "Claro",
@@ -62,7 +64,8 @@
     "messageTester": "Probador de mensajes",
     "infrastructure": "Infraestructura",
     "plugins": "Plugins",
-    "logs": "Registros"
+    "logs": "Registros",
+    "templates": "Plantillas"
   },
   "chats": {
     "subtitle": "Envía y responde mensajes de WhatsApp en tiempo real",
@@ -405,7 +408,53 @@
       "messageId": "ID de mensaje",
       "error": "Error"
     },
-    "sendFailed": "Error al enviar el mensaje"
+    "sendFailed": "Error al enviar el mensaje",
+    "notOnWhatsApp": "Este número no está registrado en WhatsApp"
+  },
+  "templates": {
+    "title": "Plantillas",
+    "subtitle": "Crea plantillas de mensaje reutilizables para cada sesión de WhatsApp",
+    "createTitle": "Crear plantilla",
+    "editTitle": "Editar plantilla",
+    "newTemplate": "Nueva plantilla",
+    "createTemplate": "Crear plantilla",
+    "saveChanges": "Guardar cambios",
+    "viewOnly": "Solo lectura",
+    "noSessions": "Sin sesiones",
+    "sessionHint": "Guardada en {{name}}",
+    "namePlaceholder": "ej., confirmacion-pedido",
+    "header": "Encabezado",
+    "headerPlaceholder": "Línea de introducción opcional",
+    "body": "Cuerpo",
+    "bodyPlaceholder": "Hola {{customer}}, tu pedido {{orderId}} está listo.",
+    "footer": "Pie",
+    "footerPlaceholder": "Línea de cierre opcional",
+    "previewTitle": "Vista previa",
+    "previewValuePlaceholder": "Valor de ejemplo",
+    "previewEmpty": "Empieza a escribir una plantilla para previsualizarla aquí.",
+    "noPlaceholders": "Usa marcadores {{nombre}} para probar sustituciones.",
+    "savedTitle": "Plantillas guardadas",
+    "count": "{{count}} en total",
+    "deleteTitle": "Eliminar plantilla",
+    "deleteConfirm": "¿Eliminar la plantilla \"{{name}}\"? Esta acción no se puede deshacer.",
+    "actions": {
+      "copyName": "Copiar nombre de plantilla"
+    },
+    "empty": {
+      "title": "No hay plantillas guardadas",
+      "description": "Crea una plantilla reutilizable para agilizar respuestas y notificaciones habituales.",
+      "noSessionsTitle": "No hay sesiones disponibles",
+      "noSessionsDesc": "Crea una sesión de WhatsApp antes de añadir plantillas."
+    },
+    "toasts": {
+      "created": "Plantilla creada correctamente",
+      "createFailed": "Error al crear la plantilla: {{message}}",
+      "updated": "Plantilla actualizada correctamente",
+      "updateFailed": "Error al actualizar la plantilla: {{message}}",
+      "deleted": "Plantilla eliminada correctamente",
+      "deleteFailed": "Error al eliminar la plantilla: {{message}}",
+      "copied": "Nombre de plantilla copiado"
+    }
   },
   "infrastructure": {
     "title": "Infraestructura",

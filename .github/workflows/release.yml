@@ -66,13 +66,16 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
+          # Author the release as a real user (the PAT owner) instead of github-actions[bot].
+          # Add a repo secret RELEASE_PAT — a fine-grained PAT scoped to this repo with
+          # "Contents: read and write". Falls back to GITHUB_TOKEN (bot-authored) when the secret
+          # is absent, so the job never breaks before the token is configured.
+          token: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
           tag_name: ${{ github.ref_name }}
           name: v${{ steps.version.outputs.VERSION }}
           body: ${{ steps.changelog.outputs.NOTES }}
           draft: false
           prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') || contains(github.ref_name, '-alpha') }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ──── Docker Image with Version Tag ───────────────────────────────
   docker:

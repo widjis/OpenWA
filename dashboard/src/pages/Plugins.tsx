@@ -31,6 +31,7 @@ import {
   useEnginesQuery,
   useCurrentEngineQuery,
   useInfraStatusQuery,
+  useSessionsQuery,
   queryKeys,
 } from '../hooks/queries';
 import { PageHeader } from '../components/PageHeader';
@@ -73,6 +74,40 @@ function emptyForField(field: PluginConfigField): unknown {
     default: // string | number | textarea — empty string (number coerced on input)
       return '';
   }
+}
+
+/**
+ * Build a sparse per-session config override from a full edited config: include only non-secret keys
+ * whose value differs from the Global base (so untouched keys keep inheriting Global), plus every
+ * TOP-LEVEL secret key (the backend restores an untouched `***` to the stored per-session value, or
+ * drops it → the host's deep-merge then re-inherits it from Global). A key absent from the base whose
+ * value is just the empty default is skipped, so an untouched optional field never creates a spurious
+ * override. With no schema, the input is returned as-is.
+ *
+ * Inheritance of untouched secrets holds for top-level secret keys and secrets nested in an OBJECT
+ * (deep-merged). It does NOT hold for a `secret` column inside an array-of-rows: arrays are replaced
+ * wholesale at resolve time, so a first-time per-session override that edits any cell of such an array
+ * loses the untouched rows' secrets (they redact to `***`, the dashboard can't resend the real value).
+ * No bundled plugin ships that shape; a plugin needing per-session array secrets should re-enter them.
+ */
+function sparseSessionOverride(full: Record<string, unknown>, plugin: Plugin): Record<string, unknown> {
+  const props = plugin.configSchema?.properties;
+  if (!props) return full;
+  const out: Record<string, unknown> = {};
+  for (const [key, field] of Object.entries(props)) {
+    if (!(key in full)) continue;
+    const val = full[key];
+    if (field.secret) {
+      out[key] = val;
+      continue;
+    }
+    if (JSON.stringify(val) === JSON.stringify(plugin.config[key])) continue; // unchanged → inherit Global
+    if (plugin.config[key] === undefined && JSON.stringify(val) === JSON.stringify(emptyForField(field))) {
+      continue; // untouched optional field with no Global value → don't pin a spurious empty override
+    }
+    out[key] = val;
+  }
+  return out;
 }
 
 /**
@@ -250,7 +285,7 @@ function ConfigField({
  * The host makes the authenticated PUT (secret redact/restore applies); the iframe only ever sees the
  * already-redacted config.
  */
-function PluginConfigUi({ plugin }: { plugin: Plugin }) {
+function PluginConfigUi({ plugin, sessionId }: { plugin: Plugin; sessionId?: string }) {
   const { t } = useTranslation();
   const toast = useToast();
   const queryClient = useQueryClient();
@@ -283,15 +318,25 @@ function PluginConfigUi({ plugin }: { plugin: Plugin }) {
         // Only expose schema-DECLARED fields (already secret-redacted by the API). An undeclared key
         // may hold a secret the host can't mask, so it never reaches the untrusted iframe; with no
         // schema there is nothing safe to send. The plugin must declare its fields to pre-fill them.
+        // For a per-session editor (sessionId set), expose the resolved slice: the session's override
+        // value where set, else the base value.
         const props = plugin.configSchema?.properties;
+        const override = sessionId ? (plugin.sessionConfig?.[sessionId] ?? {}) : {};
         const safeConfig = props
-          ? Object.fromEntries(Object.keys(props).flatMap(k => (k in plugin.config ? [[k, plugin.config[k]]] : [])))
+          ? Object.fromEntries(
+              Object.keys(props).flatMap(k => {
+                if (sessionId && k in override) return [[k, override[k]]];
+                return k in plugin.config ? [[k, plugin.config[k]]] : [];
+              }),
+            )
           : {};
         post({ type: 'config:value', config: safeConfig, schema: plugin.configSchema });
       } else if (msg?.type === 'config:save') {
         void (async () => {
           try {
-            await pluginsApi.updateConfig(plugin.id, msg.config ?? {});
+            if (sessionId)
+              await pluginsApi.updateSessionConfig(plugin.id, sessionId, sparseSessionOverride(msg.config ?? {}, plugin));
+            else await pluginsApi.updateConfig(plugin.id, msg.config ?? {});
             void queryClient.invalidateQueries({ queryKey: queryKeys.plugins });
             post({ type: 'config:saved' });
             toast.success(t('plugins.toasts.savedTitle'), t('plugins.toasts.savedDesc'));
@@ -305,7 +350,7 @@ function PluginConfigUi({ plugin }: { plugin: Plugin }) {
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [plugin, queryClient, t, toast]);
+  }, [plugin, sessionId, queryClient, t, toast]);
 
   if (error) return <div className="config-ui-status config-ui-error">{error}</div>;
   if (html === null)
@@ -326,6 +371,175 @@ function PluginConfigUi({ plugin }: { plugin: Plugin }) {
   );
 }
 
+/**
+ * The config modal's "Sessions" tab for a session-scoped plugin: set which sessions it runs for
+ * (activation), and optionally a per-session config OVERRIDE on top of the Global (`'*'`) config.
+ * Activation → PUT /plugins/:id/sessions; overrides → PUT /plugins/:id/config/:sessionId.
+ */
+function SessionsTab({ plugin }: { plugin: Plugin }) {
+  const { t, i18n } = useTranslation();
+  const toast = useToast();
+  const queryClient = useQueryClient();
+  const { data: sessions = [] } = useSessionsQuery();
+
+  // ── Activation ────────────────────────────────────────────────────────────
+  const [mode, setMode] = useState<'all' | 'specific'>(plugin.activeSessions.includes('*') ? 'all' : 'specific');
+  const [picked, setPicked] = useState<Set<string>>(new Set(plugin.activeSessions.filter(s => s !== '*')));
+  const [savingAct, setSavingAct] = useState(false);
+
+  const saveActivation = async () => {
+    setSavingAct(true);
+    try {
+      await pluginsApi.setSessions(plugin.id, mode === 'all' ? ['*'] : Array.from(picked));
+      void queryClient.invalidateQueries({ queryKey: queryKeys.plugins });
+      toast.success(t('plugins.toasts.savedTitle'), t('plugins.toasts.savedDesc'));
+    } catch (err) {
+      toast.error(t('plugins.toasts.saveFailed'), err instanceof Error ? err.message : t('common.unknownError'));
+    } finally {
+      setSavingAct(false);
+    }
+  };
+
+  // ── Per-session config override ───────────────────────────────────────────
+  const hasSchema = !!plugin.configSchema && Object.keys(plugin.configSchema.properties).length > 0;
+  const hasUi = !!plugin.configUi;
+  const lzProps = localizePlugin(plugin, i18n.language).configSchema?.properties;
+  const [selSession, setSelSession] = useState<string>('');
+  const [overrideCfg, setOverrideCfg] = useState<Record<string, unknown>>({});
+  const [savingOverride, setSavingOverride] = useState(false);
+
+  // Seed the override form from the resolved slice (the session's override value where set, else base).
+  // Keyed on selSession + plugin.id (NOT the plugin object): `configPlugin` is derived from the live
+  // query, so it gets a new reference on every refetch (refetchOnWindowFocus) — re-running on that
+  // would wipe the operator's in-progress edits. Reseed only when the selected session/plugin changes.
+  useEffect(() => {
+    const props = plugin.configSchema?.properties;
+    if (!selSession || !props) {
+      setOverrideCfg({});
+      return;
+    }
+    const ov = plugin.sessionConfig?.[selSession] ?? {};
+    const seeded: Record<string, unknown> = {};
+    for (const [key, field] of Object.entries(props)) {
+      seeded[key] = key in ov ? ov[key] : (plugin.config[key] ?? emptyForField(field));
+    }
+    setOverrideCfg(seeded);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selSession, plugin.id]);
+
+  const saveOverride = async () => {
+    if (!selSession || !plugin.configSchema?.properties) return;
+    setSavingOverride(true);
+    try {
+      await pluginsApi.updateSessionConfig(plugin.id, selSession, sparseSessionOverride(overrideCfg, plugin));
+      void queryClient.invalidateQueries({ queryKey: queryKeys.plugins });
+      toast.success(t('plugins.toasts.savedTitle'), t('plugins.toasts.savedDesc'));
+    } catch (err) {
+      toast.error(t('plugins.toasts.saveFailed'), err instanceof Error ? err.message : t('common.unknownError'));
+    } finally {
+      setSavingOverride(false);
+    }
+  };
+
+  const clearOverride = async () => {
+    if (!selSession) return;
+    setSavingOverride(true);
+    try {
+      await pluginsApi.updateSessionConfig(plugin.id, selSession, {});
+      void queryClient.invalidateQueries({ queryKey: queryKeys.plugins });
+      toast.success(t('plugins.toasts.savedTitle'), t('plugins.toasts.savedDesc'));
+    } catch (err) {
+      toast.error(t('plugins.toasts.saveFailed'), err instanceof Error ? err.message : t('common.unknownError'));
+    } finally {
+      setSavingOverride(false);
+    }
+  };
+
+  const hasOverride = (sid: string): boolean => Object.keys(plugin.sessionConfig?.[sid] ?? {}).length > 0;
+
+  return (
+    <div className="sessions-tab">
+      <section className="sessions-section">
+        <h3>{t('plugins.sessions.activationTitle')}</h3>
+        <small>{t('plugins.sessions.activationDesc')}</small>
+        <label className="sessions-radio">
+          <input type="radio" name="activation" checked={mode === 'all'} onChange={() => setMode('all')} />
+          <span>{t('plugins.sessions.allSessions')}</span>
+        </label>
+        <label className="sessions-radio">
+          <input type="radio" name="activation" checked={mode === 'specific'} onChange={() => setMode('specific')} />
+          <span>{t('plugins.sessions.specificSessions')}</span>
+        </label>
+        {mode === 'specific' &&
+          (sessions.length === 0 ? (
+            <p className="sessions-empty">{t('plugins.sessions.noSessions')}</p>
+          ) : (
+            <div className="sessions-checklist">
+              {sessions.map(s => (
+                <label key={s.id} className="sessions-check">
+                  <input
+                    type="checkbox"
+                    checked={picked.has(s.id)}
+                    onChange={e => {
+                      const next = new Set(picked);
+                      if (e.target.checked) next.add(s.id);
+                      else next.delete(s.id);
+                      setPicked(next);
+                    }}
+                  />
+                  <span>{s.name || s.id}</span>
+                </label>
+              ))}
+            </div>
+          ))}
+        <button className="btn-primary" onClick={() => void saveActivation()} disabled={savingAct}>
+          {savingAct ? <Loader2 size={16} className="animate-spin" /> : t('plugins.sessions.saveActivation')}
+        </button>
+      </section>
+
+      {(hasSchema || hasUi) && (
+        <section className="sessions-section">
+          <h3>{t('plugins.sessions.perSessionTitle')}</h3>
+          <small>{t('plugins.sessions.perSessionDesc')}</small>
+          <select className="sessions-select" value={selSession} onChange={e => setSelSession(e.target.value)}>
+            <option value="">{t('plugins.sessions.selectSession')}</option>
+            {sessions.map(s => (
+              <option key={s.id} value={s.id}>
+                {(s.name || s.id) + (hasOverride(s.id) ? ' ●' : '')}
+              </option>
+            ))}
+          </select>
+          {selSession && hasUi ? (
+            <PluginConfigUi key={selSession} plugin={plugin} sessionId={selSession} />
+          ) : selSession && plugin.configSchema ? (
+            <>
+              <div className="config-form">
+                {Object.entries(lzProps ?? plugin.configSchema.properties).map(([key, field]) => (
+                  <ConfigField
+                    key={key}
+                    field={field}
+                    label={field.title || key}
+                    value={overrideCfg[key]}
+                    onChange={v => setOverrideCfg({ ...overrideCfg, [key]: v })}
+                  />
+                ))}
+              </div>
+              <div className="sessions-override-actions">
+                <button className="btn-secondary" onClick={() => void clearOverride()} disabled={savingOverride}>
+                  {t('plugins.sessions.clearOverride')}
+                </button>
+                <button className="btn-primary" onClick={() => void saveOverride()} disabled={savingOverride}>
+                  {savingOverride ? <Loader2 size={16} className="animate-spin" /> : t('plugins.sessions.saveOverride')}
+                </button>
+              </div>
+            </>
+          ) : null}
+        </section>
+      )}
+    </div>
+  );
+}
+
 export default function Plugins() {
   const { t, i18n } = useTranslation();
   useDocumentTitle(t('plugins.title'));
@@ -341,7 +555,11 @@ export default function Plugins() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const [showConfigModal, setShowConfigModal] = useState(false);
-  const [configPlugin, setConfigPlugin] = useState<Plugin | null>(null);
+  const [configPluginId, setConfigPluginId] = useState<string | null>(null);
+  // Derive the open plugin from the LIVE query so the modal (esp. the Sessions tab) reflects the
+  // latest activeSessions/sessionConfig after a save + invalidate — not a stale open-time snapshot.
+  const configPlugin = configPluginId ? (plugins.find(p => p.id === configPluginId) ?? null) : null;
+  const [configTab, setConfigTab] = useState<'config' | 'sessions'>('config');
   const [engineConfig, setEngineConfig] = useState<EngineConfig>({
     type: infraStatus?.engine?.type || 'whatsapp-web.js',
     headless: infraStatus?.engine?.headless ?? true,
@@ -399,7 +617,8 @@ export default function Plugins() {
   };
 
   const handleOpenConfig = (plugin: Plugin) => {
-    setConfigPlugin(plugin);
+    setConfigPluginId(plugin.id);
+    setConfigTab('config');
     // Seed the schema form from the plugin's saved config, falling back to each field's default.
     if (plugin.configSchema?.properties) {
       const initial: Record<string, unknown> = {};
@@ -929,6 +1148,8 @@ export default function Plugins() {
 
       {showConfigModal && configPlugin && (() => {
         const lz = localizePlugin(configPlugin, i18n.language);
+        // Session-scoped, non-engine plugins get a Configuration/Sessions tab split; others keep one body.
+        const showTabs = configPlugin.type !== 'engine' && configPlugin.sessionScoped !== false;
         return (
         <div className="modal-overlay" onClick={() => setShowConfigModal(false)}>
           <div className="modal config-modal" onClick={e => e.stopPropagation()}>
@@ -939,8 +1160,27 @@ export default function Plugins() {
               </button>
             </div>
 
+            {showTabs && (
+              <div className="modal-tabs">
+                <button
+                  className={`modal-tab ${configTab === 'config' ? 'active' : ''}`}
+                  onClick={() => setConfigTab('config')}
+                >
+                  {t('plugins.config.tabConfig')}
+                </button>
+                <button
+                  className={`modal-tab ${configTab === 'sessions' ? 'active' : ''}`}
+                  onClick={() => setConfigTab('sessions')}
+                >
+                  {t('plugins.config.tabSessions')}
+                </button>
+              </div>
+            )}
+
             <div className="modal-body">
-              {configPlugin.type === 'engine' ? (
+              {showTabs && configTab === 'sessions' ? (
+                <SessionsTab plugin={configPlugin} />
+              ) : configPlugin.type === 'engine' ? (
                 <>
                   <div className="config-info-banner">
                     <AlertCircle size={16} />
@@ -1017,9 +1257,10 @@ export default function Plugins() {
 
             <div className="modal-footer">
               <button className="btn-secondary" onClick={() => setShowConfigModal(false)}>
-                {t('common.cancel')}
+                {t('common.close')}
               </button>
-              {configPlugin.type === 'engine' ? (
+              {/* The Sessions tab has its own Save/Clear actions; the footer Save is config-tab only. */}
+              {showTabs && configTab === 'sessions' ? null : configPlugin.type === 'engine' ? (
                 <button className="btn-primary" onClick={handleSaveConfig} disabled={savingConfig}>
                   {savingConfig ? <Loader2 size={16} className="animate-spin" /> : t('plugins.config.save')}
                 </button>

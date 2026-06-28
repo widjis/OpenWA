@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.10] - 2026-06-28
+
 ### Added
 
 - **WhatsApp Status posting (Baileys only).** The three status `send-*` endpoints now post to the status feed on the Baileys engine: `POST /api/sessions/:id/status/send-text`, `/send-image`, and `/send-video` accept a required `recipients[]` body field (1–256 JIDs, each `@c.us` or `@lid`; passed to the engine as `statusJidList` — an empty array is rejected with `400`). Image/video take an optional `image.mimetype` / `video.mimetype`; the service defaults to `image/jpeg` / `video/mp4`. A whatsapp-web.js session returns `501`: WA Web removed `WAWebStatusGatingUtils.canCheckStatusRankingPosterGating` around 2026-04-30, so the wwebjs path is upstream-blocked. `@c.us` recipients are reliable; `@lid` is best-effort (unverified), and the posting account's own phone may briefly show a "waiting for this status update" notice while recipients view it normally. Thanks @CharlesLightjarvis for the report. (#455)

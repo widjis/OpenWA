@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.5] - 2026-07-03
+
 ### Added
 
 - **Plugins can read recent chat history** via a new `ctx.engine.getChatHistory(sessionId, chatId, limit?, includeMedia?)` capability, gated by the `engine:read` permission and the plugin's active-session scope like the other engine reads. The limit is clamped host-side (max 100), and both message directions are returned. This is the host-side prerequisite for an adapter to backfill prior conversation context. (#609)

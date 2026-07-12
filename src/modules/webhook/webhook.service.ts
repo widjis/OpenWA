@@ -243,6 +243,15 @@ export class WebhookService {
       w => (w.events.includes(event) || w.events.includes('*')) && evaluateFilters(w.filters, event, data, resolveLid),
     );
 
+    if (matchingWebhooks.length > 0) {
+      this.logger.log(`Dispatching ${event} to ${matchingWebhooks.length} webhook(s)`, {
+        sessionId,
+        event,
+        webhookIds: matchingWebhooks.map(w => w.id),
+        action: 'webhook_dispatch_start',
+      });
+    }
+
     // Generate idempotency key (same for all webhooks receiving this event). occurredAt is captured
     // once here and reused for every retry of this dispatch, so recurring lifecycle events get a
     // distinct-per-occurrence key while retries of the same event stay stable.
@@ -479,6 +488,15 @@ export class WebhookService {
       this.logger.debug(`Webhook delivered to ${webhook.id}`, {
         webhookId: webhook.id,
         deliveryId: payload.deliveryId,
+        event: payload.event,
+        sessionId: payload.sessionId,
+        action: 'webhook_delivered',
+      });
+      this.logger.log(`Webhook delivered to ${webhook.id}`, {
+        webhookId: webhook.id,
+        deliveryId: payload.deliveryId,
+        event: payload.event,
+        sessionId: payload.sessionId,
         action: 'webhook_delivered',
       });
     } catch (error) {

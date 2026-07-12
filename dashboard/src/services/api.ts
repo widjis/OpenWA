@@ -215,6 +215,10 @@ export interface InfraStatus {
     enabled: boolean;
     webhooks: { pending: number; completed: number; failed: number };
   };
+  webhookSecurity: {
+    ssrfProtect: boolean;
+    allowedHosts: string;
+  };
   storage: { type: 'local' | 's3'; path?: string; bucket?: string; builtIn: boolean; s3Available?: boolean };
   engine: {
     type: string;
@@ -229,6 +233,10 @@ export interface InfraStatus {
 // Saved infrastructure config (from data/.env.generated) used to hydrate the form.
 // Secrets are never returned — `*Set` flags indicate whether a value is stored.
 export interface SavedConfig {
+  webhook: {
+    ssrfProtect: boolean;
+    allowedHosts: string;
+  };
   database: {
     type: 'sqlite' | 'postgres';
     builtIn: boolean;
@@ -256,6 +264,10 @@ export interface SavedConfig {
 }
 
 export interface SaveConfigPayload {
+  webhook?: {
+    ssrfProtect?: boolean;
+    allowedHosts?: string;
+  };
   database?: {
     type: 'sqlite' | 'postgres';
     builtIn?: boolean;

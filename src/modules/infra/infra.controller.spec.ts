@@ -252,6 +252,21 @@ describe('InfraController.saveConfig env-name correctness and merge (#226)', () 
     expect(env).toContain('PUPPETEER_HEADLESS=true'); // payload applied
   });
 
+  it('persists webhook SSRF settings for local/internal webhook allowlists', () => {
+    const env = written({ webhook: { ssrfProtect: true, allowedHosts: 'localhost,127.0.0.1,10.60.20.233' } });
+    expect(env).toContain('WEBHOOK_SSRF_PROTECT=true');
+    expect(env).toContain('SSRF_ALLOWED_HOSTS=localhost,127.0.0.1,10.60.20.233');
+  });
+
+  it('drops SSRF_ALLOWED_HOSTS when the Infrastructure form clears the allowlist', () => {
+    const env = written(
+      { webhook: { ssrfProtect: true, allowedHosts: '' } },
+      'WEBHOOK_SSRF_PROTECT=true\nSSRF_ALLOWED_HOSTS=localhost,127.0.0.1\n',
+    );
+    expect(env).toContain('WEBHOOK_SSRF_PROTECT=true');
+    expect(env).not.toContain('SSRF_ALLOWED_HOSTS=');
+  });
+
   it('does not blank a stored secret when the form submits an empty value', () => {
     const env = written({ database: { type: 'postgres', host: 'db', password: '' } }, 'DATABASE_PASSWORD=keepme\n');
     expect(env).toContain('DATABASE_PASSWORD=keepme');
@@ -652,7 +667,7 @@ describe('InfraController.getConfig (#226)', () => {
   it('returns the saved config shape without echoing secrets', () => {
     (fs.existsSync as jest.Mock).mockReturnValue(true);
     (fs.readFileSync as jest.Mock).mockReturnValue(
-      'DATABASE_TYPE=postgres\nDATABASE_HOST=db\nDATABASE_PASSWORD=secret\nSESSION_DATA_PATH=./sess\nENGINE_TYPE=baileys\nSTORAGE_TYPE=s3\nS3_ACCESS_KEY_ID=ak\nS3_SECRET_ACCESS_KEY=sk\n',
+      'DATABASE_TYPE=postgres\nDATABASE_HOST=db\nDATABASE_PASSWORD=secret\nSESSION_DATA_PATH=./sess\nENGINE_TYPE=baileys\nSTORAGE_TYPE=s3\nS3_ACCESS_KEY_ID=ak\nS3_SECRET_ACCESS_KEY=sk\nWEBHOOK_SSRF_PROTECT=false\nSSRF_ALLOWED_HOSTS=localhost,127.0.0.1,10.60.20.233\n',
     );
     const controller = new InfraController(
       {} as never,
@@ -676,6 +691,8 @@ describe('InfraController.getConfig (#226)', () => {
     expect(cfg.engine.type).toBe('baileys');
     expect(cfg.storage.type).toBe('s3');
     expect(cfg.storage.s3CredentialsSet).toBe(true);
+    expect(cfg.webhook.ssrfProtect).toBe(false);
+    expect(cfg.webhook.allowedHosts).toBe('localhost,127.0.0.1,10.60.20.233');
     // Secrets are never present on the returned object.
     expect(JSON.stringify(cfg)).not.toContain('secret');
     expect(JSON.stringify(cfg)).not.toContain('"ak"');

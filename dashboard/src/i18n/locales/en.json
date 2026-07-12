@@ -579,7 +579,13 @@
       "retryDelay": "Retry Delay (ms)",
       "rateLimit": "Rate Limiting",
       "window": "Time Window (seconds)",
-      "maxReq": "Max Requests per Window"
+      "maxReq": "Max Requests per Window",
+      "securityTitle": "Webhook Security",
+      "ssrfProtect": "Enable SSRF Protection",
+      "ssrfProtectDesc": "Keep outbound webhook registration and delivery blocked from unsafe internal addresses unless explicitly allowlisted.",
+      "allowedHosts": "Allowed Local Hosts / IPs",
+      "allowedHostsDesc": "Comma-separated hostnames or IPs that OpenWA may call even if they are local or private, for example localhost, 127.0.0.1, host.docker.internal, or 10.60.20.233.",
+      "allowedHostsPlaceholder": "localhost,127.0.0.1,host.docker.internal,10.60.20.233"
     },
     "database": {
       "title": "Database Configuration",

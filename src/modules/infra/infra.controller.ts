@@ -33,6 +33,10 @@ interface InfraStatus {
     enabled: boolean;
     webhooks: { pending: number; completed: number; failed: number };
   };
+  webhookSecurity: {
+    ssrfProtect: boolean;
+    allowedHosts: string;
+  };
   storage: { type: 'local' | 's3'; path?: string; bucket?: string; builtIn: boolean; s3Available?: boolean };
   engine: {
     type: string;
@@ -47,6 +51,10 @@ interface InfraStatus {
 }
 
 interface SaveConfigDto {
+  webhook?: {
+    ssrfProtect?: boolean;
+    allowedHosts?: string;
+  };
   database?: {
     type: 'sqlite' | 'postgres';
     builtIn?: boolean;
@@ -199,6 +207,10 @@ interface MigrationTables {
 // Saved infrastructure config returned to the dashboard form for hydration. Secret
 // values are never echoed back — a `*Set` boolean indicates whether one is stored.
 interface SavedConfigResponse {
+  webhook: {
+    ssrfProtect: boolean;
+    allowedHosts: string;
+  };
   database: {
     type: 'sqlite' | 'postgres';
     builtIn: boolean;
@@ -262,6 +274,8 @@ export class InfraController {
     const redisPort = parseInt(process.env.REDIS_PORT || '', 10) || this.configService.get<number>('redis.port', 6379);
     const redisEnabled = process.env.REDIS_ENABLED === 'true';
     const queueEnabled = this.configService.get<boolean>('queue.enabled', false);
+    const webhookSsrfProtect = process.env.WEBHOOK_SSRF_PROTECT !== 'false';
+    const webhookAllowedHosts = process.env.SSRF_ALLOWED_HOSTS || '';
 
     // Check actual Redis connectivity via CacheService
     const redisConnected = await this.cacheService.isAvailable();
@@ -342,6 +356,10 @@ export class InfraController {
         enabled: queueEnabled,
         webhooks,
       },
+      webhookSecurity: {
+        ssrfProtect: webhookSsrfProtect,
+        allowedHosts: webhookAllowedHosts,
+      },
       storage: {
         type: storageType,
         path: storagePath,
@@ -404,6 +422,10 @@ export class InfraController {
     // and an empty submission preserves the stored value (see saveConfig). This lets the
     // dashboard hydrate the form so a save no longer overwrites unseen fields (#226).
     return {
+      webhook: {
+        ssrfProtect: saved.WEBHOOK_SSRF_PROTECT !== 'false',
+        allowedHosts: saved.SSRF_ALLOWED_HOSTS || '',
+      },
       database: {
         type: saved.DATABASE_TYPE === 'postgres' ? 'postgres' : 'sqlite',
         builtIn: saved.POSTGRES_BUILTIN === 'true',
@@ -469,6 +491,13 @@ export class InfraController {
       const setSecret = (key: string, value: string | undefined): void => {
         if (value) updates[key] = value;
       };
+
+      if (config.webhook) {
+        updates.WEBHOOK_SSRF_PROTECT = config.webhook.ssrfProtect === false ? 'false' : 'true';
+        const allowedHosts = config.webhook.allowedHosts?.trim() || '';
+        if (allowedHosts) updates.SSRF_ALLOWED_HOSTS = allowedHosts;
+        else staleKeys.add('SSRF_ALLOWED_HOSTS');
+      }
 
       // Database. NOTE: these keys must match what src/config/configuration.ts reads.
       if (config.database) {

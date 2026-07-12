@@ -60,6 +60,7 @@
 | 24  | [MCP Integration](./24-mcp-integration.md)                       | Model Context Protocol tools and auth model       |
 | 25  | [Integration Fabric](./25-integration-fabric.md)                | Inbound webhook substrate for plugin integrations |
 | 26  | [Baileys to OpenWA Feature Mapping](./26-baileys-openwa-feature-mapping.md) | Migration-oriented feature comparison and gap analysis |
+| 27  | [Project Blueprint](./27-project-blueprint.md)                  | Reusable structure, conventions, and style guide for future projects |
 
 **Examples**
 

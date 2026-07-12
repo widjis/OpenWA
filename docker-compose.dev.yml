@@ -15,6 +15,11 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: openwa-api
+    # Make the Docker host reachable by a stable hostname from inside the container, so local
+    # webhook receivers on the host machine can be targeted as http://host.docker.internal:PORT/...
+    # on Linux too (Docker Desktop already provides this name on macOS/Windows).
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
     # Container hardening — same posture as production (same Dockerfile/entrypoint).
     security_opt:
       - 'no-new-privileges:true'
@@ -73,6 +78,10 @@ services:
       - PLUGINS_DIR=${PLUGINS_DIR:-/app/data/plugins}
       - WEBHOOK_TIMEOUT=${WEBHOOK_TIMEOUT:-10000}
       - WEBHOOK_MAX_RETRIES=${WEBHOOK_MAX_RETRIES:-3}
+      # Keep SSRF protection ON, but allow trusted local webhook receivers on the host machine by
+      # default. Override SSRF_ALLOWED_HOSTS in .env if you need additional names/IPs (e.g. n8n).
+      - SSRF_ALLOWED_HOSTS=${SSRF_ALLOWED_HOSTS:-host.docker.internal}
+      - WEBHOOK_SSRF_PROTECT=${WEBHOOK_SSRF_PROTECT:-true}
       - QUEUE_ENABLED=${QUEUE_ENABLED:-false}
     volumes:
       - ./data:/app/data

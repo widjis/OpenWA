@@ -76,6 +76,11 @@ interface QueueStats {
   failed: number;
 }
 
+interface WebhookSecurityConfig {
+  ssrfProtect: boolean;
+  allowedHosts: string;
+}
+
 export function Infrastructure() {
   const { t } = useTranslation();
   useDocumentTitle(t('infrastructure.title'));
@@ -124,6 +129,10 @@ export function Infrastructure() {
 
   const [queueStats, setQueueStats] = useState({
     webhooks: { pending: 0, completed: 0, failed: 0 } as QueueStats,
+  });
+  const [webhookSecurityConfig, setWebhookSecurityConfig] = useState<WebhookSecurityConfig>({
+    ssrfProtect: true,
+    allowedHosts: '',
   });
 
   const [engineConfig, setEngineConfig] = useState<EngineConfig>({
@@ -178,6 +187,11 @@ export function Infrastructure() {
       builtIn: infraStatus.redis.builtIn,
     }));
     setRedisEnabled(infraStatus.redis.enabled);
+    setWebhookSecurityConfig(prev => ({
+      ...prev,
+      ssrfProtect: infraStatus.webhookSecurity.ssrfProtect,
+      allowedHosts: infraStatus.webhookSecurity.allowedHosts || '',
+    }));
     setStorageConfig(prev => ({
       ...prev,
       type: infraStatus.storage.type,
@@ -218,6 +232,10 @@ export function Infrastructure() {
       s3Region: savedConfig.storage.s3Region || prev.s3Region,
       s3Endpoint: savedConfig.storage.s3Endpoint || prev.s3Endpoint,
     }));
+    setWebhookSecurityConfig({
+      ssrfProtect: savedConfig.webhook.ssrfProtect,
+      allowedHosts: savedConfig.webhook.allowedHosts || '',
+    });
     setEngineConfig(prev => ({
       ...prev,
       headless: savedConfig.engine.headless,
@@ -273,6 +291,8 @@ export function Infrastructure() {
     setRedisConfig(prev => ({ ...prev, [key]: value }));
   const updateStorageConfig = (key: keyof StorageConfig, value: string | boolean) =>
     setStorageConfig(prev => ({ ...prev, [key]: value }));
+  const updateWebhookSecurityConfig = (key: keyof WebhookSecurityConfig, value: string | boolean) =>
+    setWebhookSecurityConfig(prev => ({ ...prev, [key]: value }));
   const updateEngineConfig = (key: keyof EngineConfig, value: string | boolean) =>
     setEngineConfig(prev => ({ ...prev, [key]: value }));
 
@@ -280,6 +300,7 @@ export function Infrastructure() {
     setSaving(true);
     try {
       const payload = {
+        webhook: { ...webhookSecurityConfig },
         database: { ...dbConfig },
         redis: { enabled: redisEnabled, ...redisConfig },
         queue: { enabled: queueEnabled },
@@ -451,6 +472,12 @@ export function Infrastructure() {
     !savePending && !!infraStatus && !!savedConfig && infraStatus.redis.enabled !== savedConfig.redis.enabled;
   const storagePinnedByEnv =
     !savePending && !!infraStatus && !!savedConfig && infraStatus.storage.type !== savedConfig.storage.type;
+  const webhookPinnedByEnv =
+    !savePending &&
+    !!infraStatus &&
+    !!savedConfig &&
+    (infraStatus.webhookSecurity.ssrfProtect !== savedConfig.webhook.ssrfProtect ||
+      infraStatus.webhookSecurity.allowedHosts !== savedConfig.webhook.allowedHosts);
   const envPinNote = (pinned: boolean) =>
     pinned ? (
       <p className="env-pin-note">
@@ -664,6 +691,48 @@ export function Infrastructure() {
                   }}
                 />
               </label>
+            </div>
+          </div>
+        </section>
+
+        {/* Webhook Security */}
+        <section className="infra-card">
+          <div className="card-header">
+            <div className="header-left">
+              <AlertTriangle size={20} />
+              <h2>{t('infrastructure.webhook.securityTitle')}</h2>
+            </div>
+            <span className={`status-indicator ${webhookSecurityConfig.ssrfProtect ? 'connected' : 'disconnected'}`}>
+              ● {webhookSecurityConfig.ssrfProtect ? t('common.enabled') : t('common.disabled')}
+            </span>
+          </div>
+          {envPinNote(webhookPinnedByEnv)}
+
+          <div className="config-form">
+            <div className="toggle-row">
+              <div className="toggle-info">
+                <span>{t('infrastructure.webhook.ssrfProtect')}</span>
+                <small>{t('infrastructure.webhook.ssrfProtectDesc')}</small>
+              </div>
+              <label className="toggle-switch">
+                <input
+                  type="checkbox"
+                  checked={webhookSecurityConfig.ssrfProtect}
+                  onChange={e => updateWebhookSecurityConfig('ssrfProtect', e.target.checked)}
+                />
+                <span className="toggle-slider"></span>
+              </label>
+            </div>
+
+            <div className="form-group">
+              <label>{t('infrastructure.webhook.allowedHosts')}</label>
+              <input
+                type="text"
+                value={webhookSecurityConfig.allowedHosts}
+                onChange={e => updateWebhookSecurityConfig('allowedHosts', e.target.value)}
+                placeholder={t('infrastructure.webhook.allowedHostsPlaceholder')}
+              />
+              <small style={{ color: 'var(--text-muted, #64748B)' }}>{t('infrastructure.webhook.allowedHostsDesc')}</small>
             </div>
           </div>
         </section>

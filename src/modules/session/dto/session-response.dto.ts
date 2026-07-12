@@ -2,6 +2,11 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import type { Session } from '../entities/session.entity';
 import { SessionStatus } from '../entities/session.entity';
 
+const configFlag = (session: Session, key: string): boolean => {
+  const value = session.config?.[key];
+  return value === true || value === 'true';
+};
+
 export class SessionResponseDto {
   @ApiProperty({ example: 'sess_123e4567-e89b-12d3-a456-426614174000' })
   id: string;
@@ -36,12 +41,28 @@ export class SessionResponseDto {
   })
   lastError?: string | null;
 
+  @ApiProperty({
+    description:
+      'When enabled, OpenWA auto-starts this previously authenticated session on app boot and auto-reconnects it after unexpected disconnects.',
+    example: true,
+  })
+  autoRestartEnabled: boolean;
+
+  @ApiProperty({
+    description:
+      'True when auto start/reconnect is enabled but currently paused because an operator manually stopped the session.',
+    example: false,
+  })
+  autoRestartPausedByUser: boolean;
+
   /**
    * Map a Session entity to the public response shape, stripping sensitive
    * engine config fields (`config`, `proxyUrl`, `proxyType`) that must not
    * appear in any API response.
    */
   static fromEntity(session: Session): SessionResponseDto {
+    const autoRestartEnabled = configFlag(session, 'autoRestartEnabled');
+    const autoRestartPausedByUser = autoRestartEnabled && configFlag(session, 'manualStop');
     return {
       id: session.id,
       name: session.name,
@@ -53,6 +74,8 @@ export class SessionResponseDto {
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
       lastError: session.lastError ?? null,
+      autoRestartEnabled,
+      autoRestartPausedByUser,
     };
   }
 }

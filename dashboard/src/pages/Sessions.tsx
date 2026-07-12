@@ -34,6 +34,7 @@ export function Sessions() {
   const [selectedSession, setSelectedSession] = useState<Session | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [killConfirmId, setKillConfirmId] = useState<string | null>(null);
+  const [updatingBehaviorId, setUpdatingBehaviorId] = useState<string | null>(null);
 
   const fetchSessions = useCallback(async (): Promise<Session[]> => {
     try {
@@ -64,6 +65,12 @@ export function Sessions() {
   useEffect(() => {
     sessionsRef.current = sessions;
   }, [sessions]);
+
+  useEffect(() => {
+    if (!selectedSession) return;
+    const fresh = sessions.find(session => session.id === selectedSession.id);
+    if (fresh) setSelectedSession(fresh);
+  }, [sessions, selectedSession]);
 
   const { isConnected, subscribe } = useWebSocket({
     onSessionStatus: useCallback(
@@ -231,8 +238,8 @@ export function Sessions() {
     }
 
     try {
-      await sessionApi.start(id);
-      setSessions(sessions.map(s => (s.id === id ? { ...s, status: 'connecting' } : s)));
+      const updated = await sessionApi.start(id);
+      setSessions(sessions.map(s => (s.id === id ? updated : s)));
       await fetchSessions();
       handleShowQR(id);
     } catch (err) {
@@ -270,8 +277,8 @@ export function Sessions() {
 
   const handleStop = async (id: string) => {
     try {
-      await sessionApi.stop(id);
-      setSessions(sessions.map(s => (s.id === id ? { ...s, status: 'disconnected' } : s)));
+      const updated = await sessionApi.stop(id);
+      setSessions(sessions.map(s => (s.id === id ? updated : s)));
       if (qrData?.sessionId === id) setQrData(null);
     } catch (err) {
       console.error('Failed to stop:', err);
@@ -281,8 +288,8 @@ export function Sessions() {
 
   const handleForceKill = async (id: string) => {
     try {
-      await sessionApi.forceKill(id);
-      setSessions(sessions.map(s => (s.id === id ? { ...s, status: 'disconnected' } : s)));
+      const updated = await sessionApi.forceKill(id);
+      setSessions(sessions.map(s => (s.id === id ? updated : s)));
       toast.success(t('sessions.forceKill.successTitle'), t('sessions.forceKill.success'));
     } catch (err) {
       console.error('Failed to force-kill:', err);
@@ -290,6 +297,23 @@ export function Sessions() {
       fetchSessions();
     } finally {
       setKillConfirmId(null);
+    }
+  };
+
+  const handleBehaviorToggle = async (session: Session, enabled: boolean) => {
+    try {
+      setUpdatingBehaviorId(session.id);
+      const updated = await sessionApi.updateBehavior(session.id, { autoRestartEnabled: enabled });
+      setSessions(prev => prev.map(item => (item.id === session.id ? updated : item)));
+      toast.success(
+        t('sessions.autoRestart.successTitle'),
+        enabled ? t('sessions.autoRestart.enabledDesc', { name: session.name }) : t('sessions.autoRestart.disabledDesc'),
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : t('common.errorGeneric');
+      toast.error(t('sessions.autoRestart.errorTitle'), msg);
+    } finally {
+      setUpdatingBehaviorId(null);
     }
   };
 
@@ -757,6 +781,26 @@ export function Sessions() {
                   ) : null}
                 </div>
               )}
+
+              <div className="session-toggle-row">
+                <div className="session-toggle-copy">
+                  <span className="session-toggle-label">{t('sessions.autoRestart.label')}</span>
+                  <small className="session-toggle-hint">
+                    {session.autoRestartPausedByUser
+                      ? t('sessions.autoRestart.pausedByUser')
+                      : t('sessions.autoRestart.hint')}
+                  </small>
+                </div>
+                <label className="toggle-switch session-toggle-switch">
+                  <input
+                    type="checkbox"
+                    checked={session.autoRestartEnabled}
+                    disabled={!canWrite || updatingBehaviorId === session.id}
+                    onChange={e => handleBehaviorToggle(session, e.target.checked)}
+                  />
+                  <span className="toggle-slider"></span>
+                </label>
+              </div>
 
               <div className="card-actions">
                 <button className="btn-action" onClick={() => setSelectedSession(session)}>

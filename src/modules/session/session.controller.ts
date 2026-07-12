@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Param, Query, Body, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Query, Body, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { SessionService } from './session.service';
 import {
@@ -10,6 +10,7 @@ import {
   SendChatStateDto,
   RequestPairingCodeDto,
   PairingCodeResponseDto,
+  UpdateSessionBehaviorDto,
 } from './dto';
 import { Session } from './entities/session.entity';
 import { ChatSummary } from '../../engine/interfaces/whatsapp-engine.interface';
@@ -141,6 +142,29 @@ export class SessionController {
     await this.auditService.logInfo(AuditAction.SESSION_STOPPED, {
       sessionId: session.id,
       sessionName: session.name,
+    });
+    return this.transformSession(session);
+  }
+
+  @Put(':id/behavior')
+  @RequireRole(ApiKeyRole.OPERATOR)
+  @ApiOperation({ summary: 'Update per-session keep-alive behavior (auto start and reconnect policy)' })
+  @ApiParam({ name: 'id', description: 'Session ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Session behavior updated',
+    type: SessionResponseDto,
+  })
+  @ApiResponse({ status: 404, description: 'Session not found' })
+  async updateBehavior(
+    @Param('id') id: string,
+    @Body() dto: UpdateSessionBehaviorDto,
+  ): Promise<SessionResponseDto> {
+    const session = await this.sessionService.updateBehavior(id, dto.autoRestartEnabled);
+    await this.auditService.logInfo(AuditAction.SESSION_BEHAVIOR_UPDATED, {
+      sessionId: session.id,
+      sessionName: session.name,
+      metadata: { autoRestartEnabled: dto.autoRestartEnabled },
     });
     return this.transformSession(session);
   }

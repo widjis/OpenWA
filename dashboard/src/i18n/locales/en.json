@@ -281,6 +281,15 @@
       "lastActive": "Last Active",
       "error": "Error"
     },
+    "autoRestart": {
+      "label": "Auto Start & Reconnect",
+      "hint": "Restart this authenticated session on app boot and reconnect it after unexpected disconnects.",
+      "pausedByUser": "Paused because this session was stopped manually. Start it again to resume automation.",
+      "successTitle": "Session Behavior Updated",
+      "enabledDesc": "OpenWA will keep session \"{{name}}\" running automatically when possible.",
+      "disabledDesc": "Automatic start and reconnect are disabled for this session.",
+      "errorTitle": "Failed to Update Session Behavior"
+    },
     "forceKill": {
       "title": "Kill Stuck Session",
       "message": "Are you sure you want to force-kill session \"{{name}}\"?",
@@ -558,6 +567,12 @@
     "subtitle": "Configure server, database, cache, storage, and engine settings",
     "saveConfig": "Save Configuration",
     "saving": "Saving...",
+    "tabs": {
+      "ariaLabel": "Infrastructure sections",
+      "data": "Data & Cache",
+      "runtime": "Runtime & Security",
+      "storage": "Storage"
+    },
     "server": {
       "title": "Server Configuration",
       "production": "Production",
@@ -586,6 +601,12 @@
       "allowedHosts": "Allowed Local Hosts / IPs",
       "allowedHostsDesc": "Comma-separated hostnames or IPs that OpenWA may call even if they are local or private, for example localhost, 127.0.0.1, host.docker.internal, or 10.60.20.233.",
       "allowedHostsPlaceholder": "localhost,127.0.0.1,host.docker.internal,10.60.20.233"
+    },
+    "runtime": {
+      "title": "Runtime Settings",
+      "resolveLidToPhone": "Resolve LID Senders to Phone Numbers",
+      "resolveLidToPhoneDesc": "Attach resolved phone numbers for privacy-ID (@lid) senders when the engine can map them. This helps message reads, webhooks, and downstream automation work with phone-based identifiers.",
+      "restartNote": "This setting is applied on the next server restart."
     },
     "database": {
       "title": "Database Configuration",

@@ -201,6 +201,18 @@ describe('SessionService', () => {
       expect(enginesOf().has('sess-uuid-1')).toBe(false);
     });
 
+    it('stop() persists the manual-stop flag so auto-start stays paused until a manual start', async () => {
+      (repository.findOne as jest.Mock).mockResolvedValue(createMockSession({ config: { autoRestartEnabled: true } }));
+      (repository.update as jest.Mock).mockResolvedValue({ affected: 1 });
+
+      await service.stop('sess-uuid-1');
+
+      expect(repository.update).toHaveBeenCalledWith(
+        'sess-uuid-1',
+        expect.objectContaining({ config: expect.objectContaining({ autoRestartEnabled: true, manualStop: true }) }),
+      );
+    });
+
     it('delete() still surfaces a real DB-removal failure (engine teardown is best-effort, DB is not)', async () => {
       (repository.findOne as jest.Mock).mockResolvedValue(createMockSession());
       (dataSource.transaction as jest.Mock).mockRejectedValueOnce(new Error('db down'));
@@ -239,6 +251,44 @@ describe('SessionService', () => {
     it('forceKill() throws NotFoundException for an unknown session', async () => {
       (repository.findOne as jest.Mock).mockResolvedValue(null);
       await expect(service.forceKill('nope')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('updateBehavior', () => {
+    it('starts a disconnected authenticated session immediately when auto-restart is enabled', async () => {
+      const session = createMockSession({
+        status: SessionStatus.DISCONNECTED,
+        phone: '628123',
+        config: {},
+      });
+      (repository.findOne as jest.Mock).mockResolvedValue(session);
+      (repository.update as jest.Mock).mockResolvedValue({ affected: 1 });
+
+      const startSpy = jest.spyOn(service, 'start').mockResolvedValue(createMockSession() as never);
+
+      await service.updateBehavior('sess-uuid-1', true);
+
+      expect(repository.update).toHaveBeenCalledWith(
+        'sess-uuid-1',
+        expect.objectContaining({ config: expect.objectContaining({ autoRestartEnabled: true }) }),
+      );
+      expect(startSpy).toHaveBeenCalledWith('sess-uuid-1');
+    });
+
+    it('does not auto-start immediately when the session is paused by a manual stop', async () => {
+      const session = createMockSession({
+        status: SessionStatus.DISCONNECTED,
+        phone: '628123',
+        config: { manualStop: true },
+      });
+      (repository.findOne as jest.Mock).mockResolvedValue(session);
+      (repository.update as jest.Mock).mockResolvedValue({ affected: 1 });
+
+      const startSpy = jest.spyOn(service, 'start').mockResolvedValue(createMockSession() as never);
+
+      await service.updateBehavior('sess-uuid-1', true);
+
+      expect(startSpy).not.toHaveBeenCalled();
     });
   });
 
@@ -2133,10 +2183,10 @@ describe('SessionService', () => {
     it('does nothing when AUTO_START_SESSIONS is not enabled', async () => {
       delete process.env.AUTO_START_SESSIONS;
       const startSpy = jest.spyOn(service, 'start').mockResolvedValue(undefined as never);
+      (repository.find as jest.Mock).mockResolvedValue([]);
 
       await service.onApplicationBootstrap();
 
-      expect(repository.find).not.toHaveBeenCalled();
       expect(startSpy).not.toHaveBeenCalled();
     });
 
@@ -2181,6 +2231,30 @@ describe('SessionService', () => {
       await service.onApplicationBootstrap();
 
       expect(startSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('auto-starts a previously authenticated session when the per-session toggle is enabled', async () => {
+      delete process.env.AUTO_START_SESSIONS;
+      (repository.find as jest.Mock).mockResolvedValue([
+        { id: 'a', name: 'A', config: { autoRestartEnabled: true } },
+      ]);
+      const startSpy = jest.spyOn(service, 'start').mockResolvedValue(undefined as never);
+
+      await service.onApplicationBootstrap();
+
+      expect(startSpy).toHaveBeenCalledWith('a');
+    });
+
+    it('skips a manually stopped session even when global auto-start is enabled', async () => {
+      process.env.AUTO_START_SESSIONS = 'true';
+      (repository.find as jest.Mock).mockResolvedValue([
+        { id: 'a', name: 'A', config: { manualStop: true } },
+      ]);
+      const startSpy = jest.spyOn(service, 'start').mockResolvedValue(undefined as never);
+
+      await service.onApplicationBootstrap();
+
+      expect(startSpy).not.toHaveBeenCalled();
     });
   });
 });

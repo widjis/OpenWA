@@ -27,6 +27,8 @@ export interface Session {
   updatedAt: string;
   /** Human-readable reason for the most recent terminal engine failure (set only when status is 'failed'). */
   lastError?: string | null;
+  autoRestartEnabled: boolean;
+  autoRestartPausedByUser: boolean;
 }
 
 export interface SessionStats {
@@ -215,6 +217,9 @@ export interface InfraStatus {
     enabled: boolean;
     webhooks: { pending: number; completed: number; failed: number };
   };
+  runtime: {
+    resolveLidToPhone: boolean;
+  };
   webhookSecurity: {
     ssrfProtect: boolean;
     allowedHosts: string;
@@ -233,6 +238,9 @@ export interface InfraStatus {
 // Saved infrastructure config (from data/.env.generated) used to hydrate the form.
 // Secrets are never returned — `*Set` flags indicate whether a value is stored.
 export interface SavedConfig {
+  runtime: {
+    resolveLidToPhone: boolean;
+  };
   webhook: {
     ssrfProtect: boolean;
     allowedHosts: string;
@@ -264,6 +272,9 @@ export interface SavedConfig {
 }
 
 export interface SaveConfigPayload {
+  runtime?: {
+    resolveLidToPhone?: boolean;
+  };
   webhook?: {
     ssrfProtect?: boolean;
     allowedHosts?: string;
@@ -403,6 +414,11 @@ export const sessionApi = {
   delete: (id: string) => request<void>(`/sessions/${id}`, { method: 'DELETE' }),
   start: (id: string) => request<Session>(`/sessions/${id}/start`, { method: 'POST' }),
   stop: (id: string) => request<Session>(`/sessions/${id}/stop`, { method: 'POST' }),
+  updateBehavior: (id: string, data: { autoRestartEnabled: boolean }) =>
+    request<Session>(`/sessions/${id}/behavior`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
   forceKill: (id: string) => request<Session>(`/sessions/${id}/force-kill`, { method: 'POST' }),
   getQR: (id: string) => request<{ qrCode: string; status: string }>(`/sessions/${id}/qr`),
   requestPairingCode: (id: string, phoneNumber: string) =>

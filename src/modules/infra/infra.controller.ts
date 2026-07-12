@@ -33,6 +33,9 @@ interface InfraStatus {
     enabled: boolean;
     webhooks: { pending: number; completed: number; failed: number };
   };
+  runtime: {
+    resolveLidToPhone: boolean;
+  };
   webhookSecurity: {
     ssrfProtect: boolean;
     allowedHosts: string;
@@ -51,6 +54,9 @@ interface InfraStatus {
 }
 
 interface SaveConfigDto {
+  runtime?: {
+    resolveLidToPhone?: boolean;
+  };
   webhook?: {
     ssrfProtect?: boolean;
     allowedHosts?: string;
@@ -207,6 +213,9 @@ interface MigrationTables {
 // Saved infrastructure config returned to the dashboard form for hydration. Secret
 // values are never echoed back — a `*Set` boolean indicates whether one is stored.
 interface SavedConfigResponse {
+  runtime: {
+    resolveLidToPhone: boolean;
+  };
   webhook: {
     ssrfProtect: boolean;
     allowedHosts: string;
@@ -274,6 +283,7 @@ export class InfraController {
     const redisPort = parseInt(process.env.REDIS_PORT || '', 10) || this.configService.get<number>('redis.port', 6379);
     const redisEnabled = process.env.REDIS_ENABLED === 'true';
     const queueEnabled = this.configService.get<boolean>('queue.enabled', false);
+    const resolveLidToPhone = process.env.RESOLVE_LID_TO_PHONE === 'true';
     const webhookSsrfProtect = process.env.WEBHOOK_SSRF_PROTECT !== 'false';
     const webhookAllowedHosts = process.env.SSRF_ALLOWED_HOSTS || '';
 
@@ -356,6 +366,9 @@ export class InfraController {
         enabled: queueEnabled,
         webhooks,
       },
+      runtime: {
+        resolveLidToPhone,
+      },
       webhookSecurity: {
         ssrfProtect: webhookSsrfProtect,
         allowedHosts: webhookAllowedHosts,
@@ -422,6 +435,9 @@ export class InfraController {
     // and an empty submission preserves the stored value (see saveConfig). This lets the
     // dashboard hydrate the form so a save no longer overwrites unseen fields (#226).
     return {
+      runtime: {
+        resolveLidToPhone: saved.RESOLVE_LID_TO_PHONE === 'true',
+      },
       webhook: {
         ssrfProtect: saved.WEBHOOK_SSRF_PROTECT !== 'false',
         allowedHosts: saved.SSRF_ALLOWED_HOSTS || '',
@@ -491,6 +507,10 @@ export class InfraController {
       const setSecret = (key: string, value: string | undefined): void => {
         if (value) updates[key] = value;
       };
+
+      if (config.runtime) {
+        updates.RESOLVE_LID_TO_PHONE = config.runtime.resolveLidToPhone ? 'true' : 'false';
+      }
 
       if (config.webhook) {
         updates.WEBHOOK_SSRF_PROTECT = config.webhook.ssrfProtect === false ? 'false' : 'true';

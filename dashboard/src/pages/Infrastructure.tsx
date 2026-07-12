@@ -81,6 +81,12 @@ interface WebhookSecurityConfig {
   allowedHosts: string;
 }
 
+interface RuntimeConfig {
+  resolveLidToPhone: boolean;
+}
+
+type InfrastructureTab = 'data' | 'runtime' | 'storage';
+
 export function Infrastructure() {
   const { t } = useTranslation();
   useDocumentTitle(t('infrastructure.title'));
@@ -134,6 +140,10 @@ export function Infrastructure() {
     ssrfProtect: true,
     allowedHosts: '',
   });
+  const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfig>({
+    resolveLidToPhone: false,
+  });
+  const [activeTab, setActiveTab] = useState<InfrastructureTab>('runtime');
 
   const [engineConfig, setEngineConfig] = useState<EngineConfig>({
     type: 'whatsapp-web.js',
@@ -187,6 +197,9 @@ export function Infrastructure() {
       builtIn: infraStatus.redis.builtIn,
     }));
     setRedisEnabled(infraStatus.redis.enabled);
+    setRuntimeConfig({
+      resolveLidToPhone: infraStatus.runtime.resolveLidToPhone,
+    });
     setWebhookSecurityConfig(prev => ({
       ...prev,
       ssrfProtect: infraStatus.webhookSecurity.ssrfProtect,
@@ -232,6 +245,9 @@ export function Infrastructure() {
       s3Region: savedConfig.storage.s3Region || prev.s3Region,
       s3Endpoint: savedConfig.storage.s3Endpoint || prev.s3Endpoint,
     }));
+    setRuntimeConfig({
+      resolveLidToPhone: savedConfig.runtime.resolveLidToPhone,
+    });
     setWebhookSecurityConfig({
       ssrfProtect: savedConfig.webhook.ssrfProtect,
       allowedHosts: savedConfig.webhook.allowedHosts || '',
@@ -291,6 +307,8 @@ export function Infrastructure() {
     setRedisConfig(prev => ({ ...prev, [key]: value }));
   const updateStorageConfig = (key: keyof StorageConfig, value: string | boolean) =>
     setStorageConfig(prev => ({ ...prev, [key]: value }));
+  const updateRuntimeConfig = (key: keyof RuntimeConfig, value: boolean) =>
+    setRuntimeConfig(prev => ({ ...prev, [key]: value }));
   const updateWebhookSecurityConfig = (key: keyof WebhookSecurityConfig, value: string | boolean) =>
     setWebhookSecurityConfig(prev => ({ ...prev, [key]: value }));
   const updateEngineConfig = (key: keyof EngineConfig, value: string | boolean) =>
@@ -300,6 +318,7 @@ export function Infrastructure() {
     setSaving(true);
     try {
       const payload = {
+        runtime: { ...runtimeConfig },
         webhook: { ...webhookSecurityConfig },
         database: { ...dbConfig },
         redis: { enabled: redisEnabled, ...redisConfig },
@@ -472,6 +491,8 @@ export function Infrastructure() {
     !savePending && !!infraStatus && !!savedConfig && infraStatus.redis.enabled !== savedConfig.redis.enabled;
   const storagePinnedByEnv =
     !savePending && !!infraStatus && !!savedConfig && infraStatus.storage.type !== savedConfig.storage.type;
+  const runtimePinnedByEnv =
+    !savePending && !!infraStatus && !!savedConfig && infraStatus.runtime.resolveLidToPhone !== savedConfig.runtime.resolveLidToPhone;
   const webhookPinnedByEnv =
     !savePending &&
     !!infraStatus &&
@@ -489,7 +510,28 @@ export function Infrastructure() {
     <div className="infrastructure-page">
       <PageHeader title={t('infrastructure.title')} subtitle={t('infrastructure.subtitle')} />
 
+      <div className="infra-tabs" role="tablist" aria-label={t('infrastructure.tabs.ariaLabel')}>
+        {([
+          ['data', t('infrastructure.tabs.data')],
+          ['runtime', t('infrastructure.tabs.runtime')],
+          ['storage', t('infrastructure.tabs.storage')],
+        ] as Array<[InfrastructureTab, string]>).map(([tab, label]) => (
+          <button
+            key={tab}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab}
+            className={`infra-tab ${activeTab === tab ? 'active' : ''}`}
+            onClick={() => setActiveTab(tab)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       <div className="infra-sections">
+        {activeTab === 'data' && (
+          <>
         {/* Database */}
         <section className="infra-card">
           <div className="card-header">
@@ -694,6 +736,43 @@ export function Infrastructure() {
             </div>
           </div>
         </section>
+          </>
+        )}
+
+        {activeTab === 'runtime' && (
+          <>
+        <section className="infra-card">
+          <div className="card-header">
+            <div className="header-left">
+              <CheckCircle size={20} />
+              <h2>{t('infrastructure.runtime.title')}</h2>
+            </div>
+            <span className={`status-indicator ${runtimeConfig.resolveLidToPhone ? 'connected' : 'disconnected'}`}>
+              ● {runtimeConfig.resolveLidToPhone ? t('common.enabled') : t('common.disabled')}
+            </span>
+          </div>
+          {envPinNote(runtimePinnedByEnv)}
+
+          <div className="config-form">
+            <div className="toggle-row">
+              <div className="toggle-info">
+                <span>{t('infrastructure.runtime.resolveLidToPhone')}</span>
+                <small>{t('infrastructure.runtime.resolveLidToPhoneDesc')}</small>
+              </div>
+              <label className="toggle-switch">
+                <input
+                  type="checkbox"
+                  checked={runtimeConfig.resolveLidToPhone}
+                  onChange={e => updateRuntimeConfig('resolveLidToPhone', e.target.checked)}
+                />
+                <span className="toggle-slider"></span>
+              </label>
+            </div>
+            <p style={{ margin: 0, color: '#64748B', fontSize: '0.8125rem', lineHeight: 1.5 }}>
+              {t('infrastructure.runtime.restartNote')}
+            </p>
+          </div>
+        </section>
 
         {/* Webhook Security */}
         <section className="infra-card">
@@ -825,7 +904,11 @@ export function Infrastructure() {
             {t('infrastructure.engine.restartNote')}
           </p>
         </section>
+          </>
+        )}
 
+        {activeTab === 'data' && (
+          <>
         {/* Redis */}
         <section className="infra-card">
           <div className="card-header">
@@ -1004,7 +1087,11 @@ export function Infrastructure() {
             </div>
           )}
         </section>
+          </>
+        )}
 
+        {activeTab === 'storage' && (
+          <>
         {/* Storage */}
         <section className="infra-card">
           <div className="card-header">
@@ -1132,6 +1219,8 @@ export function Infrastructure() {
             )}
           </div>
         </section>
+          </>
+        )}
       </div>
 
       {showRestartModal && (

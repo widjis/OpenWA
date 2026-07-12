@@ -87,6 +87,15 @@ export function clampReconnectDelay(rawDelay: number, baseDelay: number): number
   return clampNumber(Number.isFinite(rawDelay) ? rawDelay : baseDelay, 0, RECONNECT_DELAY_CAP_MS);
 }
 
+function normalizeSessionConfig(config: unknown): Record<string, unknown> {
+  return config && typeof config === 'object' && !Array.isArray(config) ? { ...(config as Record<string, unknown>) } : {};
+}
+
+function readConfigFlag(config: unknown, key: string): boolean {
+  const value = normalizeSessionConfig(config)[key];
+  return value === true || value === 'true';
+}
+
 export function resolveMaxConcurrentSessions(configService?: Pick<ConfigService, 'get'>): number | null {
   const configured = configService?.get<number>('sessions.maxConcurrent', 0) ?? 0;
   if (!Number.isFinite(configured) || configured <= 0) return null;
@@ -178,21 +187,21 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
   }
 
   async onApplicationBootstrap(): Promise<void> {
-    if (process.env.AUTO_START_SESSIONS !== 'true') return;
-
     const sessions = await this.sessionRepository.find({
       where: { phone: Not(IsNull()), status: SessionStatus.DISCONNECTED },
     });
 
-    if (sessions.length === 0) return;
+    const eligible = sessions.filter(session => this.shouldAutoRestartSession(session));
+    if (eligible.length === 0) return;
 
-    this.logger.log(`Auto-starting ${sessions.length} previously authenticated session(s)`, {
+    this.logger.log(`Auto-starting ${eligible.length} previously authenticated session(s)`, {
       action: 'auto_start',
-      count: sessions.length,
+      count: eligible.length,
+      globalAutoStart: process.env.AUTO_START_SESSIONS === 'true',
     });
 
-    for (let i = 0; i < sessions.length; i++) {
-      const session = sessions[i];
+    for (let i = 0; i < eligible.length; i++) {
+      const session = eligible[i];
       try {
         await this.start(session.id);
         this.logger.log(`Auto-started session: ${session.name}`, {
@@ -207,7 +216,7 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
         });
       }
       // Throttle between sequential Chromium launches; no need to wait after the last one.
-      if (i < sessions.length - 1) {
+      if (i < eligible.length - 1) {
         await this.delay(2000);
       }
     }
@@ -434,6 +443,11 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
     try {
       // A fresh start intentionally (re-)creates the engine — clear any stale stop/delete mark.
       this.stoppingSessions.delete(id);
+      if (this.isManualStop(session)) {
+        const nextConfig = this.mergeSessionConfig(session.config, { manualStop: false });
+        await this.sessionRepository.update(id, { config: nextConfig } as QueryDeepPartialEntity<Session>);
+        session.config = nextConfig;
+      }
 
       // Execute hook before starting
       await this.hookManager.execute(
@@ -987,8 +1001,8 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
 
         void this.updateStatus(id, SessionStatus.DISCONNECTED);
 
-        // Attempt to reconnect
-        this.scheduleReconnect(id, session);
+        // Attempt to reconnect only when the operator opted into keep-alive behavior.
+        this.maybeScheduleReconnect(id, session);
       },
       onStateChanged: (engineState: EngineStatus): void => {
         if (!this.isLiveEngine(id, engine)) return;
@@ -1110,6 +1124,26 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
     }, delay);
   }
 
+  private maybeScheduleReconnect(id: string, fallbackSession: Session): void {
+    if (this.stoppingSessions.has(id)) return;
+    void this.sessionRepository
+      .findOne({ where: { id } })
+      .then(latest => {
+        if (!latest || this.stoppingSessions.has(id)) return;
+        if (!this.shouldAutoRestartSession(latest)) {
+          this.logger.log(`Auto-restart is disabled for session: ${latest.name}`, {
+            sessionId: id,
+            action: 'reconnect_skipped',
+            autoRestartEnabled: this.isAutoRestartEnabled(latest),
+            manualStop: this.isManualStop(latest),
+          });
+          return;
+        }
+        this.scheduleReconnect(id, latest);
+      })
+      .catch(err => this.logger.error(`Failed to evaluate reconnect policy for ${fallbackSession.name}`, String(err)));
+  }
+
   /**
    * True once a session must stay down: it is explicitly marked tearing-down, or it was deleted
    * outright while a slow engine.initialize() was in flight. delete() clears its `stoppingSessions`
@@ -1182,6 +1216,9 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
     this.stoppingSessions.add(id);
     // Cancel any reconnection attempts
     this.cancelReconnect(id);
+    const nextConfig = this.mergeSessionConfig(session.config, { manualStop: true });
+    await this.sessionRepository.update(id, { config: nextConfig } as QueryDeepPartialEntity<Session>);
+    session.config = nextConfig;
 
     // Disconnect the engine — time-bounded + isolated so a stuck socket can't wedge the stop; the
     // Map is reconciled regardless. (The stop mark is intentionally left set, matching the prior
@@ -1212,6 +1249,9 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
     // Mark as tearing down BEFORE cleanup so an in-flight reconnect can't resurrect it.
     this.stoppingSessions.add(id);
     this.cancelReconnect(id);
+    const nextConfig = this.mergeSessionConfig(session.config, { manualStop: true });
+    await this.sessionRepository.update(id, { config: nextConfig } as QueryDeepPartialEntity<Session>);
+    session.config = nextConfig;
 
     const engine = this.engines.get(id);
     if (engine) {
@@ -1273,6 +1313,38 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
     return this.engines.get(id);
   }
 
+  async updateBehavior(id: string, autoRestartEnabled: boolean): Promise<Session> {
+    const session = await this.findOne(id);
+    const nextConfig = this.mergeSessionConfig(session.config, { autoRestartEnabled });
+    await this.sessionRepository.update(id, { config: nextConfig } as QueryDeepPartialEntity<Session>);
+    session.config = nextConfig;
+
+    if (!autoRestartEnabled) {
+      this.cancelReconnect(id);
+      return this.findOne(id);
+    }
+
+    if (
+      session.status === SessionStatus.DISCONNECTED &&
+      session.phone &&
+      !this.isManualStop(session) &&
+      !this.engines.has(id) &&
+      !this.initializingSessions.has(id)
+    ) {
+      try {
+        return await this.start(id);
+      } catch (error: unknown) {
+        this.logger.warn(`Auto-start on enable failed for session: ${session.name}`, {
+          sessionId: id,
+          action: 'auto_start_on_enable_failed',
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    return this.findOne(id);
+  }
+
   /**
    * Best-effort resolution of a privacy-id sender (`@lid`) to a phone number for inline attachment on
    * incoming messages (#263). Cached per session (incl. misses). Never throws — returns null on any
@@ -1325,6 +1397,22 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
       linkedParentJID: g.linkedParentJID,
     }));
     return paginate(mapped, opts.limit, opts.offset);
+  }
+
+  private isAutoRestartEnabled(session: Pick<Session, 'config'>): boolean {
+    return readConfigFlag(session.config, 'autoRestartEnabled');
+  }
+
+  private isManualStop(session: Pick<Session, 'config'>): boolean {
+    return readConfigFlag(session.config, 'manualStop');
+  }
+
+  private shouldAutoRestartSession(session: Pick<Session, 'config'>): boolean {
+    return (process.env.AUTO_START_SESSIONS === 'true' || this.isAutoRestartEnabled(session)) && !this.isManualStop(session);
+  }
+
+  private mergeSessionConfig(config: unknown, patch: Record<string, unknown>): Record<string, unknown> {
+    return { ...normalizeSessionConfig(config), ...patch };
   }
 
   async getChats(id: string, opts: ListOptions = {}): Promise<ChatSummary[]> {

@@ -79,6 +79,10 @@ services:
       - XDG_CACHE_HOME=/tmp/.cache
       - PORT=2785
       - LOG_LEVEL=${LOG_LEVEL:-info}
+      # For HTTP-only private-network deployments, allow opting out of CSP's browser-side
+      # HTTP->HTTPS auto-upgrade. Without forwarding this env into the container, production
+      # defaults still emit `upgrade-insecure-requests` and the dashboard becomes unreachable.
+      - CSP_UPGRADE_INSECURE_REQUESTS=${CSP_UPGRADE_INSECURE_REQUESTS:-}
       # Database. Forwarded blank by default (`${VAR:-}`) so a dashboard switch saved to
       # data/.env.generated actually applies at runtime — main.ts clears the blank (BLANK_SHADOWED_ENV_KEYS)
       # and the file wins. Set any of these in your .env/host to pin it (a real value keeps top precedence

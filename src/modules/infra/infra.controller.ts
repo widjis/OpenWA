@@ -35,6 +35,7 @@ interface InfraStatus {
   };
   runtime: {
     resolveLidToPhone: boolean;
+    enableSwagger: boolean;
   };
   webhookSecurity: {
     ssrfProtect: boolean;
@@ -56,6 +57,7 @@ interface InfraStatus {
 interface SaveConfigDto {
   runtime?: {
     resolveLidToPhone?: boolean;
+    enableSwagger?: boolean;
   };
   webhook?: {
     ssrfProtect?: boolean;
@@ -215,6 +217,7 @@ interface MigrationTables {
 interface SavedConfigResponse {
   runtime: {
     resolveLidToPhone: boolean;
+    enableSwagger: boolean;
   };
   webhook: {
     ssrfProtect: boolean;
@@ -284,6 +287,7 @@ export class InfraController {
     const redisEnabled = process.env.REDIS_ENABLED === 'true';
     const queueEnabled = this.configService.get<boolean>('queue.enabled', false);
     const resolveLidToPhone = process.env.RESOLVE_LID_TO_PHONE === 'true';
+    const enableSwagger = process.env.ENABLE_SWAGGER === 'true';
     const webhookSsrfProtect = process.env.WEBHOOK_SSRF_PROTECT !== 'false';
     const webhookAllowedHosts = process.env.SSRF_ALLOWED_HOSTS || '';
 
@@ -368,6 +372,7 @@ export class InfraController {
       },
       runtime: {
         resolveLidToPhone,
+        enableSwagger,
       },
       webhookSecurity: {
         ssrfProtect: webhookSsrfProtect,
@@ -437,6 +442,7 @@ export class InfraController {
     return {
       runtime: {
         resolveLidToPhone: saved.RESOLVE_LID_TO_PHONE === 'true',
+        enableSwagger: saved.ENABLE_SWAGGER === 'true',
       },
       webhook: {
         ssrfProtect: saved.WEBHOOK_SSRF_PROTECT !== 'false',
@@ -510,6 +516,7 @@ export class InfraController {
 
       if (config.runtime) {
         updates.RESOLVE_LID_TO_PHONE = config.runtime.resolveLidToPhone ? 'true' : 'false';
+        updates.ENABLE_SWAGGER = config.runtime.enableSwagger ? 'true' : 'false';
       }
 
       if (config.webhook) {

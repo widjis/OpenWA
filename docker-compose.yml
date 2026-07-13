@@ -79,6 +79,9 @@ services:
       - XDG_CACHE_HOME=/tmp/.cache
       - PORT=2785
       - LOG_LEVEL=${LOG_LEVEL:-info}
+      # Swagger docs are disabled by default in production unless explicitly enabled.
+      # Forward the operator's .env value so /api/docs can be served on exposed/private deployments.
+      - ENABLE_SWAGGER=${ENABLE_SWAGGER:-}
       # For HTTP-only private-network deployments, allow opting out of CSP's browser-side
       # HTTP->HTTPS auto-upgrade. Without forwarding this env into the container, production
       # defaults still emit `upgrade-insecure-requests` and the dashboard becomes unreachable.

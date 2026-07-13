@@ -83,6 +83,7 @@ interface WebhookSecurityConfig {
 
 interface RuntimeConfig {
   resolveLidToPhone: boolean;
+  enableSwagger: boolean;
 }
 
 type InfrastructureTab = 'data' | 'runtime' | 'storage';
@@ -142,6 +143,7 @@ export function Infrastructure() {
   });
   const [runtimeConfig, setRuntimeConfig] = useState<RuntimeConfig>({
     resolveLidToPhone: false,
+    enableSwagger: false,
   });
   const [activeTab, setActiveTab] = useState<InfrastructureTab>('runtime');
 
@@ -199,6 +201,7 @@ export function Infrastructure() {
     setRedisEnabled(infraStatus.redis.enabled);
     setRuntimeConfig({
       resolveLidToPhone: infraStatus.runtime.resolveLidToPhone,
+      enableSwagger: infraStatus.runtime.enableSwagger,
     });
     setWebhookSecurityConfig(prev => ({
       ...prev,
@@ -247,6 +250,7 @@ export function Infrastructure() {
     }));
     setRuntimeConfig({
       resolveLidToPhone: savedConfig.runtime.resolveLidToPhone,
+      enableSwagger: savedConfig.runtime.enableSwagger,
     });
     setWebhookSecurityConfig({
       ssrfProtect: savedConfig.webhook.ssrfProtect,
@@ -492,7 +496,13 @@ export function Infrastructure() {
   const storagePinnedByEnv =
     !savePending && !!infraStatus && !!savedConfig && infraStatus.storage.type !== savedConfig.storage.type;
   const runtimePinnedByEnv =
-    !savePending && !!infraStatus && !!savedConfig && infraStatus.runtime.resolveLidToPhone !== savedConfig.runtime.resolveLidToPhone;
+    !savePending &&
+    !!infraStatus &&
+    !!savedConfig &&
+    (infraStatus.runtime.resolveLidToPhone !== savedConfig.runtime.resolveLidToPhone ||
+      infraStatus.runtime.enableSwagger !== savedConfig.runtime.enableSwagger);
+
+  const runtimeEnabled = runtimeConfig.resolveLidToPhone || runtimeConfig.enableSwagger;
   const webhookPinnedByEnv =
     !savePending &&
     !!infraStatus &&
@@ -747,8 +757,8 @@ export function Infrastructure() {
               <CheckCircle size={20} />
               <h2>{t('infrastructure.runtime.title')}</h2>
             </div>
-            <span className={`status-indicator ${runtimeConfig.resolveLidToPhone ? 'connected' : 'disconnected'}`}>
-              ● {runtimeConfig.resolveLidToPhone ? t('common.enabled') : t('common.disabled')}
+            <span className={`status-indicator ${runtimeEnabled ? 'connected' : 'disconnected'}`}>
+              ● {runtimeEnabled ? t('common.enabled') : t('common.disabled')}
             </span>
           </div>
           {envPinNote(runtimePinnedByEnv)}
@@ -764,6 +774,20 @@ export function Infrastructure() {
                   type="checkbox"
                   checked={runtimeConfig.resolveLidToPhone}
                   onChange={e => updateRuntimeConfig('resolveLidToPhone', e.target.checked)}
+                />
+                <span className="toggle-slider"></span>
+              </label>
+            </div>
+            <div className="toggle-row">
+              <div className="toggle-info">
+                <span>{t('infrastructure.runtime.enableSwagger')}</span>
+                <small>{t('infrastructure.runtime.enableSwaggerDesc')}</small>
+              </div>
+              <label className="toggle-switch">
+                <input
+                  type="checkbox"
+                  checked={runtimeConfig.enableSwagger}
+                  onChange={e => updateRuntimeConfig('enableSwagger', e.target.checked)}
                 />
                 <span className="toggle-slider"></span>
               </label>

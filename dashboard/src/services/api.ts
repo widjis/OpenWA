@@ -219,6 +219,7 @@ export interface InfraStatus {
   };
   runtime: {
     resolveLidToPhone: boolean;
+    enableSwagger: boolean;
   };
   webhookSecurity: {
     ssrfProtect: boolean;
@@ -240,6 +241,7 @@ export interface InfraStatus {
 export interface SavedConfig {
   runtime: {
     resolveLidToPhone: boolean;
+    enableSwagger: boolean;
   };
   webhook: {
     ssrfProtect: boolean;
@@ -274,6 +276,7 @@ export interface SavedConfig {
 export interface SaveConfigPayload {
   runtime?: {
     resolveLidToPhone?: boolean;
+    enableSwagger?: boolean;
   };
   webhook?: {
     ssrfProtect?: boolean;

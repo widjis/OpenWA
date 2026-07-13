@@ -606,6 +606,8 @@
       "title": "Runtime Settings",
       "resolveLidToPhone": "Resolve LID Senders to Phone Numbers",
       "resolveLidToPhoneDesc": "Attach resolved phone numbers for privacy-ID (@lid) senders when the engine can map them. This helps message reads, webhooks, and downstream automation work with phone-based identifiers.",
+      "enableSwagger": "Enable API Documentation",
+      "enableSwaggerDesc": "Serve the Swagger UI at /api/docs for operator access on this deployment.",
       "restartNote": "This setting is applied on the next server restart."
     },
     "database": {

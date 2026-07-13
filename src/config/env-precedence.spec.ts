@@ -77,6 +77,7 @@ describe('blank-shadowed env keys (compose ${VAR:-} forwards the dashboard manag
   });
 
   it('covers DATABASE_PASSWORD (its compose forward renders blank and the dashboard saves it)', () => {
+    expect(BLANK_SHADOWED_ENV_KEYS).toContain('ENABLE_SWAGGER');
     expect(BLANK_SHADOWED_ENV_KEYS).toContain('ENGINE_TYPE');
     expect(BLANK_SHADOWED_ENV_KEYS).toContain('DATABASE_PASSWORD');
   });
@@ -86,6 +87,7 @@ describe('blank-shadowed env keys (compose ${VAR:-} forwards the dashboard manag
     // compose, a dashboard switch saved to .env.generated actually applies at runtime (like ENGINE_TYPE),
     // while a real host value still pins.
     for (const key of [
+      'ENABLE_SWAGGER',
       'DATABASE_TYPE',
       'DATABASE_HOST',
       'DATABASE_PORT',
@@ -110,6 +112,7 @@ describe('blank-shadowed env keys (compose ${VAR:-} forwards the dashboard manag
   });
 
   it.each([
+    ['ENABLE_SWAGGER', 'true'],
     ['DATABASE_TYPE', 'postgres'],
     ['STORAGE_TYPE', 's3'],
     ['REDIS_ENABLED', 'true'],

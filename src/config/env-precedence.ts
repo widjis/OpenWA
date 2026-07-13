@@ -18,6 +18,8 @@
  * with the `${KEY:-}` forwards in docker-compose.yml.
  */
 export const BLANK_SHADOWED_ENV_KEYS: string[] = [
+  // Runtime settings managed from Infrastructure (#488)
+  'ENABLE_SWAGGER',
   'ENGINE_TYPE',
   // Database selection + connection details (#488)
   'DATABASE_TYPE',

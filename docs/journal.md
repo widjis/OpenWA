@@ -12,3 +12,18 @@
 ## Notes:
 - The document is migration-oriented rather than a raw engine capability matrix
 - Outbound typing is exposed in OpenWA, while inbound presence and typing observation remain outside the current public contract
+
+(2026-07-19)
+
+## Feature:
+- Local Infrastructure restart behavior for engine switching
+
+## Changes:
+- Updated `POST /infra/restart` to avoid shutting the app down when Docker orchestration is unavailable
+- Returned a manual-restart message for local mode so engine changes stay saved without killing the running app
+- Updated the Infrastructure page to stop waiting for a fake restart in local mode and surface the backend message immediately
+- Added a regression test covering the non-Docker restart path
+
+## Notes:
+- Local non-Docker mode now behaves as "save config, then restart manually" for engine changes
+- Docker-backed environments keep the existing orchestrated restart flow

@@ -889,3 +889,39 @@ describe('InfraController.requestRestart constrains teardown to managed profiles
     expect(removed).not.toContain('evil');
   });
 });
+
+describe('InfraController.requestRestart local mode', () => {
+  const buildController = (shutdown = jest.fn()) => ({
+    controller: new InfraController(
+      { get: () => undefined } as never,
+      { isInitialized: true } as never,
+      { isInitialized: true } as never,
+      {} as never, // engineFactory
+      {
+        isDockerAvailable: () => false,
+        removeService: jest.fn(),
+        orchestrateProfiles: jest.fn(),
+      } as never,
+      { isAvailable: () => Promise.resolve(false) } as never, // cacheService
+      { isS3Available: () => false, refreshS3Availability: () => Promise.resolve(false) } as never, // storageService
+      { shutdown } as never,
+    ),
+    shutdown,
+  });
+
+  afterEach(() => {
+    (fs.writeFileSync as jest.Mock).mockClear();
+  });
+
+  it('does not shut the app down when Docker orchestration is unavailable', async () => {
+    const { controller, shutdown } = buildController();
+
+    const result = await controller.requestRestart();
+
+    expect(shutdown).not.toHaveBeenCalled();
+    expect(fs.writeFileSync).not.toHaveBeenCalled();
+    expect(result.restarting).toBe(false);
+    expect(result.estimatedTime).toBe(0);
+    expect(result.message).toContain('Manual restart required');
+  });
+});

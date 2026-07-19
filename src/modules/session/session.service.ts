@@ -1423,10 +1423,48 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
       throw new BadRequestException('Session is not started');
     }
 
-    // Most-recent first, then bound the response window. Sorting before the cap means a capped
-    // response is the N newest chats (what clients show first) rather than an arbitrary slice.
-    const chats = [...(await engine.getChats())].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    let chats: ChatSummary[];
+    try {
+      chats = [...(await engine.getChats())].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    } catch (error) {
+      const fallback = await this.getPersistedChats(id);
+      this.logger.warn('Engine getChats failed; falling back to persisted chat summaries', {
+        sessionId: id,
+        action: 'get_chats_fallback',
+        persistedCount: fallback.length,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      chats = fallback;
+    }
     return paginate(chats, opts.limit, opts.offset);
+  }
+
+  private async getPersistedChats(id: string): Promise<ChatSummary[]> {
+    // Best-effort fallback for chat sidebar rendering: when a live engine list call fails (e.g.
+    // whatsapp-web.js runtime hiccup), build the newest unique chats from persisted messages so the
+    // dashboard stays usable. Unread counts are not tracked in the DB, so expose 0 here.
+    const recentMessages = await this.messageRepository.find({
+      where: { sessionId: id },
+      order: { timestamp: 'DESC', createdAt: 'DESC' },
+      take: 5000,
+    });
+    const chats = new Map<string, ChatSummary>();
+    for (const msg of recentMessages) {
+      if (!msg.chatId || chats.has(msg.chatId)) continue;
+      const timestamp =
+        typeof msg.timestamp === 'number' && Number.isFinite(msg.timestamp)
+          ? msg.timestamp
+          : Math.floor(new Date(msg.createdAt).getTime() / 1000);
+      chats.set(msg.chatId, {
+        id: msg.chatId,
+        name: msg.chatName?.trim() || msg.chatId,
+        isGroup: msg.chatId.endsWith('@g.us'),
+        unreadCount: 0,
+        timestamp,
+        lastMessage: msg.type === 'location' ? '📍' : msg.body || undefined,
+      });
+    }
+    return [...chats.values()];
   }
 
   async sendSeen(id: string, chatId: string): Promise<boolean> {

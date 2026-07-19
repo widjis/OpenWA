@@ -1331,6 +1331,19 @@ describe('LID resolution for individual sends (#573 — WhatsApp @c.us → @lid 
     expect(sendMessage).toHaveBeenCalledWith('120@g.us', 'hi');
   });
 
+  it('returns a fallback MessageResult when whatsapp-web.js resolves undefined for a @lid send', async () => {
+    const sendMessage = jest.fn().mockResolvedValue(undefined);
+    const before = Math.floor(Date.now() / 1000);
+
+    const result = await ready({ sendMessage }).sendTextMessage('80444922015783@lid', 'hi');
+
+    const after = Math.floor(Date.now() / 1000);
+    expect(sendMessage).toHaveBeenCalledWith('80444922015783@lid', 'hi');
+    expect(result.id).toBe('');
+    expect(result.timestamp).toBeGreaterThanOrEqual(before);
+    expect(result.timestamp).toBeLessThanOrEqual(after);
+  });
+
   it('falls back to the original id when getNumberId returns null (unregistered/unmigrated)', async () => {
     const getNumberId = jest.fn().mockResolvedValue(null);
     const sendMessage = jest.fn().mockResolvedValue(sentMessage);
@@ -1362,6 +1375,20 @@ describe('LID resolution for individual sends (#573 — WhatsApp @c.us → @lid 
     await ready({ getNumberId, getChatById }).sendChatState('529934031058@c.us', 'typing');
     expect(getChatById).toHaveBeenCalledWith('159442138038327@lid');
     expect(sendStateTyping).toHaveBeenCalled();
+  });
+
+  it('resolves the recipient on the read-receipt path (sendSeen) too', async () => {
+    const getNumberId = jest.fn().mockResolvedValue({ _serialized: '159442138038327@lid' });
+    const sendSeen = jest.fn().mockResolvedValue(true);
+    const getChatById = jest.fn().mockResolvedValue({ sendSeen });
+    await expect(ready({ getNumberId, getChatById }).sendSeen('529934031058@c.us')).resolves.toBe(true);
+    expect(getChatById).toHaveBeenCalledWith('159442138038327@lid');
+    expect(sendSeen).toHaveBeenCalled();
+  });
+
+  it('treats sendSeen failures as best-effort and returns false', async () => {
+    const getChatById = jest.fn().mockRejectedValue(new Error('r: r'));
+    await expect(ready({ getChatById }).sendSeen('80444922015783@lid')).resolves.toBe(false);
   });
 
   it('caches a resolved @lid so a later getNumberId failure still sends to the @lid, not @c.us (#580)', async () => {

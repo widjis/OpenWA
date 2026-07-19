@@ -715,8 +715,10 @@ export class InfraController {
     this.logger.log('Restart requested', { profiles });
     this.logger.log('Profiles to remove', { profilesToRemove });
 
+    const dockerAvailable = this.dockerService.isDockerAvailable();
+
     // If profiles are specified, orchestrate Docker containers
-    if (this.dockerService.isDockerAvailable()) {
+    if (dockerAvailable) {
       // Remove only the profiles the Save flow explicitly asked to remove, and never one we're about to
       // (re)start. We deliberately do NOT infer teardown from the saved *_BUILTIN flag: the default
       // data/.env.generated carries POSTGRES_BUILTIN=false, so a bare compose-profile restart would
@@ -760,26 +762,16 @@ export class InfraController {
         this.logger.log('Orchestration result', { orchestrationResult });
       }
     } else {
-      this.logger.warn('Docker not available, writing signal file instead');
-      // Fallback: write signal file for host script
-      try {
-        const signalFile = path.resolve(process.cwd(), 'data', '.orchestration-request.json');
-        const orchestrationRequest = {
-          timestamp: new Date().toISOString(),
-          profiles,
-          profilesToRemove,
-          action: 'restart-with-profiles',
-        };
-        fs.writeFileSync(signalFile, JSON.stringify(orchestrationRequest, null, 2), 'utf8');
-        this.logger.log('Orchestration request written', { signalFile });
-      } catch (err) {
-        this.logger.error('Failed to write orchestration request', err instanceof Error ? err.message : String(err));
-      }
+      this.logger.warn('Docker not available; manual restart required in local mode', {
+        action: 'restart_manual_required',
+      });
     }
 
-    // Schedule graceful shutdown after the configurable bounded grace (SHUTDOWN_DELAY_MS,
-    // default 3s) — readiness reports 503 during the window so traffic drains first.
-    void this.shutdownService.shutdown();
+    if (dockerAvailable) {
+      // Schedule graceful shutdown after the configurable bounded grace (SHUTDOWN_DELAY_MS,
+      // default 3s) — readiness reports 503 during the window so traffic drains first.
+      void this.shutdownService.shutdown();
+    }
 
     // Calculate estimated time - base 15s + additional for each service (increased for reliability)
     let estimatedTime = 15;
@@ -789,14 +781,15 @@ export class InfraController {
     if (profilesToRemove.length > 0) estimatedTime += profilesToRemove.length * 5; // +5s per removal
 
     return {
-      message:
-        profiles.length > 0 || profilesToRemove.length > 0
+      message: dockerAvailable
+        ? profiles.length > 0 || profilesToRemove.length > 0
           ? `Server is restarting. Enabling: ${profiles.join(', ') || 'none'}. Disabling: ${profilesToRemove.join(', ') || 'none'}.`
-          : 'Server is restarting. Please wait...',
-      restarting: true,
+          : 'Server is restarting. Please wait...'
+        : 'Configuration saved. Manual restart required to apply changes in local mode.',
+      restarting: dockerAvailable,
       profiles,
       profilesToRemove,
-      estimatedTime,
+      estimatedTime: dockerAvailable ? estimatedTime : 0,
       orchestration: orchestrationResult,
       removal: removalResult,
     };

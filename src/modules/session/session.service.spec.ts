@@ -1884,6 +1884,70 @@ describe('SessionService', () => {
 
       await expect(service.getChats('sess-uuid-1')).rejects.toThrow(BadRequestException);
     });
+
+    it('falls back to persisted chats when engine.getChats throws', async () => {
+      const session = createMockSession();
+      (repository.findOne as jest.Mock).mockResolvedValue(session);
+      (repository.update as jest.Mock).mockResolvedValue({ affected: 1 });
+      await service.start('sess-uuid-1');
+
+      mockEngine.getChats.mockRejectedValue(new Error('r'));
+      (messageRepository.find as jest.Mock).mockResolvedValue([
+        {
+          sessionId: 'sess-uuid-1',
+          chatId: 'group@g.us',
+          chatName: 'Ops Group',
+          body: 'latest group',
+          type: 'text',
+          timestamp: 200,
+          createdAt: new Date('2026-07-19T01:00:00Z'),
+        },
+        {
+          sessionId: 'sess-uuid-1',
+          chatId: '123@c.us',
+          chatName: 'Alice',
+          body: 'hello',
+          type: 'text',
+          timestamp: 150,
+          createdAt: new Date('2026-07-19T00:59:00Z'),
+        },
+        {
+          sessionId: 'sess-uuid-1',
+          chatId: '123@c.us',
+          chatName: 'Alice Older',
+          body: 'older',
+          type: 'text',
+          timestamp: 100,
+          createdAt: new Date('2026-07-19T00:58:00Z'),
+        },
+      ]);
+
+      const result = await service.getChats('sess-uuid-1');
+
+      expect(messageRepository.find).toHaveBeenCalledWith({
+        where: { sessionId: 'sess-uuid-1' },
+        order: { timestamp: 'DESC', createdAt: 'DESC' },
+        take: 5000,
+      });
+      expect(result).toEqual([
+        {
+          id: 'group@g.us',
+          name: 'Ops Group',
+          isGroup: true,
+          unreadCount: 0,
+          timestamp: 200,
+          lastMessage: 'latest group',
+        },
+        {
+          id: '123@c.us',
+          name: 'Alice',
+          isGroup: false,
+          unreadCount: 0,
+          timestamp: 150,
+          lastMessage: 'hello',
+        },
+      ]);
+    });
   });
 
   describe('getGroups pagination', () => {

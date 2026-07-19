@@ -148,6 +148,30 @@ export interface WhatsAppWebJsConfig {
 const READY_RECONCILE_INTERVAL_MS = 2000;
 const READY_RECONCILE_TIMEOUT_MS = 90_000;
 
+function coerceSentMessageResult(
+  logger: ReturnType<typeof createLogger>,
+  operation: string,
+  chatId: string,
+  msg: unknown,
+): MessageResult {
+  const candidate = msg as { id?: { _serialized?: unknown } | unknown; timestamp?: unknown } | null | undefined;
+  const serialized =
+    typeof candidate?.id === 'object' && candidate?.id !== null && '_serialized' in candidate.id
+      ? (candidate.id as { _serialized?: unknown })._serialized
+      : undefined;
+  const timestamp = typeof candidate?.timestamp === 'number' && Number.isFinite(candidate.timestamp) ? candidate.timestamp : undefined;
+  if (typeof serialized === 'string' && timestamp != null) {
+    return { id: serialized, timestamp };
+  }
+  logger.warn(`${operation} succeeded but whatsapp-web.js returned no message metadata; using fallback result`, {
+    chatId,
+    resultType: typeof msg,
+    hasId: Boolean(candidate?.id),
+    hasTimestamp: timestamp != null,
+  });
+  return { id: '', timestamp: Math.floor(Date.now() / 1000) };
+}
+
 // WhatsApp Web version resolution (the #488 auto-resolve) lives in a dependency-free module so infra
 // status can import it without loading whatsapp-web.js (engine lazy-loading). The adapter imports
 // resolveWebVersionPin above for use in initialize().
@@ -894,10 +918,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
     const msg = await this.sendResolved(chatId, to =>
       mentions?.length ? this.client!.sendMessage(to, text, { mentions }) : this.client!.sendMessage(to, text),
     );
-    return {
-      id: msg.id._serialized,
-      timestamp: msg.timestamp,
-    };
+    return coerceSentMessageResult(this.logger, 'sendTextMessage', chatId, msg);
   }
 
   async sendImageMessage(chatId: string, media: MediaInput): Promise<MessageResult> {
@@ -948,10 +969,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       }),
     );
 
-    return {
-      id: msg.id._serialized,
-      timestamp: msg.timestamp,
-    };
+    return coerceSentMessageResult(this.logger, 'sendMediaMessage', chatId, msg);
   }
 
   async getContacts(): Promise<Contact[]> {
@@ -1052,10 +1070,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
       address: location.address || '',
     });
     const msg = await this.sendResolved(chatId, to => this.client!.sendMessage(to, loc));
-    return {
-      id: msg.id._serialized,
-      timestamp: msg.timestamp,
-    };
+    return coerceSentMessageResult(this.logger, 'sendLocationMessage', chatId, msg);
   }
 
   async sendContactMessage(chatId: string, contact: ContactCard): Promise<MessageResult> {
@@ -1069,10 +1084,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
         parseVCards: true,
       }),
     );
-    return {
-      id: msg.id._serialized,
-      timestamp: msg.timestamp,
-    };
+    return coerceSentMessageResult(this.logger, 'sendContactMessage', chatId, msg);
   }
 
   async sendStickerMessage(chatId: string, media: MediaInput): Promise<MessageResult> {
@@ -1094,10 +1106,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
         sendMediaAsSticker: true,
       }),
     );
-    return {
-      id: msg.id._serialized,
-      timestamp: msg.timestamp,
-    };
+    return coerceSentMessageResult(this.logger, 'sendStickerMessage', chatId, msg);
   }
 
   async replyToMessage(chatId: string, quotedMsgId: string, text: string): Promise<MessageResult> {
@@ -1115,10 +1124,7 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
     // so route it through sendResolved (resolve @c.us->@lid, cache, self-heal). reply(content, chatId)
     // accepts an explicit target (#583 R1).
     const msg = await this.sendResolved(chatId, to => quotedMsg.reply(text, to));
-    return {
-      id: msg.id._serialized,
-      timestamp: msg.timestamp,
-    };
+    return coerceSentMessageResult(this.logger, 'replyToMessage', chatId, msg);
   }
 
   async forwardMessage(fromChatId: string, toChatId: string, messageId: string): Promise<MessageResult> {
@@ -1734,10 +1740,14 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
   async sendSeen(chatId: string): Promise<boolean> {
     this.ensureReady();
     try {
-      const chat = await this.client!.getChatById(chatId);
+      const to = await this.resolveSendId(chatId);
+      const chat = await this.client!.getChatById(to);
       return await chat.sendSeen();
     } catch (error) {
-      this.logger.error(`Error marking chat ${chatId} as read`, String(error));
+      // Read receipts are best-effort for parity with typing/recording presence: certain @lid chats on
+      // whatsapp-web.js intermittently throw internal `r: r`, but the surrounding chat/send flow still
+      // succeeds. Log as WARN so operators don't mistake a cosmetic/read-receipt failure for a fatal send.
+      this.logger.warn(`Could not mark chat ${chatId} as read (best-effort)`, String(error));
       return false;
     }
   }

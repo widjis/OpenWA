@@ -438,6 +438,13 @@ export function Infrastructure() {
 
     try {
       const response = await infraApi.restart(pendingProfiles, profilesToRemove);
+      if (!response.restarting) {
+        setRestartStatus('idle');
+        setRestartCountdown(0);
+        setShowRestartModal(false);
+        toast.success(t('infrastructure.restart.idleTitle'), response.message);
+        return;
+      }
       if (response.estimatedTime) setRestartCountdown(response.estimatedTime);
     } catch {
       // Expected — server shutting down

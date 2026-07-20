@@ -36,6 +36,7 @@ For any non-trivial task, follow this order:
 4. Implement only the checklist items for that phase
 5. Run challenge/verification for the changed area and capture explicit evidence for the checklist item being executed
 6. Update roadmap and related docs before declaring completion
+7. Always run the project's lint test after making changes and record the result as part of verification evidence
 
 ## Mandatory Documents
 The repository should maintain at least these mandatory documents when applicable:
@@ -86,6 +87,7 @@ A phase is only complete when:
 ## Verification Standard
 Every meaningful implementation must include explicit verification evidence, such as:
 - build/typecheck passed
+- lint test passed after the change
 - endpoint contract verified
 - workflow path tested
 - edge case or failure path challenged

@@ -154,12 +154,11 @@ function coerceSentMessageResult(
   chatId: string,
   msg: unknown,
 ): MessageResult {
-  const candidate = msg as { id?: { _serialized?: unknown } | unknown; timestamp?: unknown } | null | undefined;
-  const serialized =
-    typeof candidate?.id === 'object' && candidate?.id !== null && '_serialized' in candidate.id
-      ? (candidate.id as { _serialized?: unknown })._serialized
-      : undefined;
-  const timestamp = typeof candidate?.timestamp === 'number' && Number.isFinite(candidate.timestamp) ? candidate.timestamp : undefined;
+  const candidate = msg as { id?: { _serialized?: unknown } | null; timestamp?: unknown } | null | undefined;
+  const id = candidate?.id;
+  const serialized = typeof id === 'object' && id !== null && '_serialized' in id ? id._serialized : undefined;
+  const timestamp =
+    typeof candidate?.timestamp === 'number' && Number.isFinite(candidate.timestamp) ? candidate.timestamp : undefined;
   if (typeof serialized === 'string' && timestamp != null) {
     return { id: serialized, timestamp };
   }

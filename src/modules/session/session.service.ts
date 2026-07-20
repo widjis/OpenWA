@@ -88,7 +88,9 @@ export function clampReconnectDelay(rawDelay: number, baseDelay: number): number
 }
 
 function normalizeSessionConfig(config: unknown): Record<string, unknown> {
-  return config && typeof config === 'object' && !Array.isArray(config) ? { ...(config as Record<string, unknown>) } : {};
+  return config && typeof config === 'object' && !Array.isArray(config)
+    ? { ...(config as Record<string, unknown>) }
+    : {};
 }
 
 function readConfigFlag(config: unknown, key: string): boolean {
@@ -1390,7 +1392,25 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
       throw new BadRequestException('Session is not started');
     }
 
-    const groups = await engine.getGroups();
+    let groups: Awaited<ReturnType<typeof engine.getGroups>>;
+    try {
+      groups = await engine.getGroups();
+    } catch (error) {
+      const fallback = (await this.getPersistedChats(id))
+        .filter(chat => chat.isGroup)
+        .map(chat => ({
+          id: chat.id,
+          name: chat.name,
+          linkedParentJID: null,
+        }));
+      this.logger.warn('Engine getGroups failed; falling back to persisted group summaries', {
+        sessionId: id,
+        action: 'get_groups_fallback',
+        persistedCount: fallback.length,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      groups = fallback;
+    }
     const mapped = groups.map(g => ({
       id: g.id,
       name: g.name,
@@ -1408,7 +1428,9 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
   }
 
   private shouldAutoRestartSession(session: Pick<Session, 'config'>): boolean {
-    return (process.env.AUTO_START_SESSIONS === 'true' || this.isAutoRestartEnabled(session)) && !this.isManualStop(session);
+    return (
+      (process.env.AUTO_START_SESSIONS === 'true' || this.isAutoRestartEnabled(session)) && !this.isManualStop(session)
+    );
   }
 
   private mergeSessionConfig(config: unknown, patch: Record<string, unknown>): Record<string, unknown> {

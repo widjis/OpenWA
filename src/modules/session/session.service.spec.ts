@@ -207,10 +207,18 @@ describe('SessionService', () => {
 
       await service.stop('sess-uuid-1');
 
-      expect(repository.update).toHaveBeenCalledWith(
-        'sess-uuid-1',
-        expect.objectContaining({ config: expect.objectContaining({ autoRestartEnabled: true, manualStop: true }) }),
+      const updateCalls = (repository.update as jest.Mock).mock.calls as unknown[][];
+      const configPatchCall = updateCalls.find(
+        call => call[0] === 'sess-uuid-1' && typeof call[1] === 'object' && call[1] !== null && 'config' in call[1],
       );
+
+      expect(configPatchCall).toBeDefined();
+      expect(configPatchCall?.[1]).toMatchObject({
+        config: {
+          autoRestartEnabled: true,
+          manualStop: true,
+        },
+      });
     });
 
     it('delete() still surfaces a real DB-removal failure (engine teardown is best-effort, DB is not)', async () => {
@@ -264,14 +272,21 @@ describe('SessionService', () => {
       (repository.findOne as jest.Mock).mockResolvedValue(session);
       (repository.update as jest.Mock).mockResolvedValue({ affected: 1 });
 
-      const startSpy = jest.spyOn(service, 'start').mockResolvedValue(createMockSession() as never);
+      const startSpy = jest.spyOn(service, 'start').mockResolvedValue(createMockSession());
 
       await service.updateBehavior('sess-uuid-1', true);
 
-      expect(repository.update).toHaveBeenCalledWith(
-        'sess-uuid-1',
-        expect.objectContaining({ config: expect.objectContaining({ autoRestartEnabled: true }) }),
+      const updateCalls = (repository.update as jest.Mock).mock.calls as unknown[][];
+      const configPatchCall = updateCalls.find(
+        call => call[0] === 'sess-uuid-1' && typeof call[1] === 'object' && call[1] !== null && 'config' in call[1],
       );
+
+      expect(configPatchCall).toBeDefined();
+      expect(configPatchCall?.[1]).toMatchObject({
+        config: {
+          autoRestartEnabled: true,
+        },
+      });
       expect(startSpy).toHaveBeenCalledWith('sess-uuid-1');
     });
 
@@ -284,7 +299,7 @@ describe('SessionService', () => {
       (repository.findOne as jest.Mock).mockResolvedValue(session);
       (repository.update as jest.Mock).mockResolvedValue({ affected: 1 });
 
-      const startSpy = jest.spyOn(service, 'start').mockResolvedValue(createMockSession() as never);
+      const startSpy = jest.spyOn(service, 'start').mockResolvedValue(createMockSession());
 
       await service.updateBehavior('sess-uuid-1', true);
 
@@ -1619,7 +1634,7 @@ describe('SessionService', () => {
           driverError: { code: 'SQLITE_CONSTRAINT_UNIQUE', message: 'UNIQUE constraint failed' },
         }); // re-fire
 
-      const msg = {
+      const msg: IncomingMessage = {
         id: 'wa-1',
         from: 'peer@c.us',
         to: 'me@c.us',
@@ -1963,6 +1978,52 @@ describe('SessionService', () => {
       const result = await service.getGroups('sess-uuid-1');
       expect(result).toHaveLength(1000);
     });
+
+    it('falls back to persisted groups when engine.getGroups throws', async () => {
+      const session = createMockSession();
+      (repository.findOne as jest.Mock).mockResolvedValue(session);
+      (repository.update as jest.Mock).mockResolvedValue({ affected: 1 });
+      await service.start('sess-uuid-1');
+
+      mockEngine.getGroups.mockRejectedValue(new Error('r: r'));
+      (messageRepository.find as jest.Mock).mockResolvedValue([
+        {
+          sessionId: 'sess-uuid-1',
+          chatId: 'group@g.us',
+          chatName: 'Ops Group',
+          body: 'latest group',
+          type: 'text',
+          timestamp: 200,
+          createdAt: new Date('2026-07-19T01:00:00Z'),
+        },
+        {
+          sessionId: 'sess-uuid-1',
+          chatId: '123@c.us',
+          chatName: 'Alice',
+          body: 'hello',
+          type: 'text',
+          timestamp: 150,
+          createdAt: new Date('2026-07-19T00:59:00Z'),
+        },
+        {
+          sessionId: 'sess-uuid-1',
+          chatId: 'group@g.us',
+          chatName: 'Ops Group Older',
+          body: 'older',
+          type: 'text',
+          timestamp: 100,
+          createdAt: new Date('2026-07-19T00:58:00Z'),
+        },
+      ]);
+
+      await expect(service.getGroups('sess-uuid-1')).resolves.toEqual([
+        {
+          id: 'group@g.us',
+          name: 'Ops Group',
+          linkedParentJID: null,
+        },
+      ]);
+    });
   });
 
   describe('start() concurrent stop/delete guard', () => {
@@ -2299,9 +2360,7 @@ describe('SessionService', () => {
 
     it('auto-starts a previously authenticated session when the per-session toggle is enabled', async () => {
       delete process.env.AUTO_START_SESSIONS;
-      (repository.find as jest.Mock).mockResolvedValue([
-        { id: 'a', name: 'A', config: { autoRestartEnabled: true } },
-      ]);
+      (repository.find as jest.Mock).mockResolvedValue([{ id: 'a', name: 'A', config: { autoRestartEnabled: true } }]);
       const startSpy = jest.spyOn(service, 'start').mockResolvedValue(undefined as never);
 
       await service.onApplicationBootstrap();
@@ -2311,9 +2370,7 @@ describe('SessionService', () => {
 
     it('skips a manually stopped session even when global auto-start is enabled', async () => {
       process.env.AUTO_START_SESSIONS = 'true';
-      (repository.find as jest.Mock).mockResolvedValue([
-        { id: 'a', name: 'A', config: { manualStop: true } },
-      ]);
+      (repository.find as jest.Mock).mockResolvedValue([{ id: 'a', name: 'A', config: { manualStop: true } }]);
       const startSpy = jest.spyOn(service, 'start').mockResolvedValue(undefined as never);
 
       await service.onApplicationBootstrap();

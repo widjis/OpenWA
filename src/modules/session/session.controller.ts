@@ -156,10 +156,7 @@ export class SessionController {
     type: SessionResponseDto,
   })
   @ApiResponse({ status: 404, description: 'Session not found' })
-  async updateBehavior(
-    @Param('id') id: string,
-    @Body() dto: UpdateSessionBehaviorDto,
-  ): Promise<SessionResponseDto> {
+  async updateBehavior(@Param('id') id: string, @Body() dto: UpdateSessionBehaviorDto): Promise<SessionResponseDto> {
     const session = await this.sessionService.updateBehavior(id, dto.autoRestartEnabled);
     await this.auditService.logInfo(AuditAction.SESSION_BEHAVIOR_UPDATED, {
       sessionId: session.id,

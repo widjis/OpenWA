@@ -18,7 +18,7 @@ import { MessageBatch } from '../message/entities/message-batch.entity';
 import { CreateSessionDto } from './dto';
 import { EngineFactory } from '../../engine/engine.factory';
 import { LidMappingStoreService } from '../../engine/identity/lid-mapping-store.service';
-import { userPart } from '../../engine/identity/wa-id';
+import { parseWaId, toNeutralJid, userPart } from '../../engine/identity/wa-id';
 import { paginate, ListOptions, resolveListWindow } from '../../common/utils/paginate';
 import { isUniqueConstraintError } from '../../common/utils/unique-constraint.util';
 import {
@@ -28,6 +28,7 @@ import {
   ChatState,
   DeliveryStatus,
   IncomingMessage,
+  PresenceUpdateEvent,
   ReactionEvent,
 } from '../../engine/interfaces/whatsapp-engine.interface';
 import { createLogger } from '../../common/services/logger.service';
@@ -514,6 +515,78 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
     return this.engines.get(id) === engine;
   }
 
+  private resolveMonitoringChatId(): string | null {
+    const configured =
+      this.configService?.get<string>('runtime.monitoringNumber', process.env.MONITORING_NUMBER || '') ??
+      process.env.MONITORING_NUMBER ??
+      '';
+    const raw = configured.trim();
+    if (!raw) {
+      return null;
+    }
+
+    if (raw.includes('@')) {
+      const neutral = toNeutralJid(raw);
+      return parseWaId(neutral).kind === 'user' ? neutral : null;
+    }
+
+    const digits = raw.replace(/[^\d]/g, '');
+    return digits ? `${digits}@c.us` : null;
+  }
+
+  private buildMonitoringReadyMessage(
+    session: Pick<Session, 'id' | 'name'>,
+    phone: string,
+    pushName: string,
+    eventType: 'connected' | 'reconnected',
+  ): string {
+    const lines = [
+      `[OpenWA] Session ${eventType}`,
+      `Session: ${session.name}`,
+      `Session ID: ${session.id}`,
+      `Phone: ${phone}`,
+    ];
+    if (pushName) {
+      lines.push(`Push Name: ${pushName}`);
+    }
+    lines.push(`Time: ${new Date().toISOString()}`);
+    return lines.join('\n');
+  }
+
+  private async sendMonitoringReadyNotification(
+    id: string,
+    session: Pick<Session, 'id' | 'name'>,
+    engine: IWhatsAppEngine,
+    phone: string,
+    pushName: string,
+    eventType: 'connected' | 'reconnected',
+  ): Promise<void> {
+    const chatId = this.resolveMonitoringChatId();
+    if (!chatId) {
+      return;
+    }
+
+    const text = this.buildMonitoringReadyMessage(session, phone, pushName, eventType);
+
+    try {
+      await engine.sendTextMessage(chatId, text);
+      this.logger.log('Monitoring notification sent', {
+        sessionId: id,
+        monitoringChatId: chatId,
+        eventType,
+        action: 'monitoring_notification_sent',
+      });
+    } catch (error) {
+      this.logger.warn('Failed to send monitoring notification', {
+        sessionId: id,
+        monitoringChatId: chatId,
+        eventType,
+        error: error instanceof Error ? error.message : String(error),
+        action: 'monitoring_notification_failed',
+      });
+    }
+  }
+
   /**
    * Persist pre-connection history into the `messages` table for the chat view, without webhook/hook/ws
    * dispatch (it predates the live session). De-duplicated by `waMessageId` so re-syncs never duplicate.
@@ -638,6 +711,7 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
       },
       onReady: (phone: string, pushName: string): void => {
         if (!this.isLiveEngine(id, engine)) return;
+        const readyEventType: 'connected' | 'reconnected' = session.phone ? 'reconnected' : 'connected';
         this.logger.log(`Session ready: ${phone}`, {
           sessionId: id,
           phone,
@@ -672,6 +746,14 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
           connectedAt: new Date(),
           lastActiveAt: new Date(),
         });
+        void this.sendMonitoringReadyNotification(
+          id,
+          { id: session.id, name: session.name },
+          engine,
+          phone,
+          pushName,
+          readyEventType,
+        );
       },
       onMessage: (message): void => {
         if (!this.isLiveEngine(id, engine)) return;
@@ -979,6 +1061,20 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
             this.reactionChains.delete(key);
           }
         });
+      },
+      onPresenceUpdate: (event: PresenceUpdateEvent): void => {
+        if (!this.isLiveEngine(id, engine)) return;
+        this.logger.debug(`Presence update: ${event.participantId} -> ${event.state}`, {
+          sessionId: id,
+          chatId: event.chatId,
+          participantId: event.participantId,
+          state: event.state,
+          action: 'presence_update',
+        });
+
+        const payload = event as unknown as Record<string, unknown>;
+        this.eventsGateway.emitPresenceUpdate(id, payload);
+        void this.webhookService.dispatch(id, 'presence.update', payload);
       },
       onDisconnected: (reason: string): void => {
         if (!this.isLiveEngine(id, engine)) return;

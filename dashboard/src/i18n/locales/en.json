@@ -392,6 +392,7 @@
     "eventDescriptions": {
       "message.received": "When a message is received",
       "message.sent": "When a message is sent",
+      "presence.update": "When a participant presence changes",
       "session.connected": "When a session connects",
       "session.disconnected": "When a session disconnects",
       "session.qr": "When QR code is generated",

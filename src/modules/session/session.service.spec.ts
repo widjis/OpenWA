@@ -12,7 +12,12 @@ import { LidMappingStoreService } from '../../engine/identity/lid-mapping-store.
 import { EventsGateway } from '../events/events.gateway';
 import { WebhookService } from '../webhook/webhook.service';
 import { HookManager } from '../../core/hooks';
-import { IncomingMessage, EngineEventCallbacks, EngineStatus } from '../../engine/interfaces/whatsapp-engine.interface';
+import {
+  IncomingMessage,
+  EngineEventCallbacks,
+  EngineStatus,
+  PresenceUpdateEvent,
+} from '../../engine/interfaces/whatsapp-engine.interface';
 import { BaileysSessionStore } from '../../engine/adapters/baileys-session-store';
 
 function createMockSession(overrides: Partial<Session> = {}): Session {
@@ -81,6 +86,7 @@ describe('SessionService', () => {
       initialize: jest.fn().mockResolvedValue(undefined),
       destroy: jest.fn().mockResolvedValue(undefined),
       disconnect: jest.fn().mockResolvedValue(undefined),
+      sendTextMessage: jest.fn().mockResolvedValue({ id: 'wa-monitor-1', timestamp: 123 }),
       getQRCode: jest.fn().mockReturnValue(null),
       getGroups: jest.fn().mockResolvedValue([]),
       getChats: jest.fn().mockResolvedValue([]),
@@ -104,6 +110,7 @@ describe('SessionService', () => {
       emitMessageAck: jest.fn(),
       emitMessageRevoked: jest.fn(),
       emitMessageReaction: jest.fn(),
+      emitPresenceUpdate: jest.fn(),
       emitQRCode: jest.fn(),
     };
 
@@ -849,6 +856,55 @@ describe('SessionService', () => {
       });
     });
 
+    it('sends a monitoring WhatsApp message when the live engine becomes ready and a monitoring number is configured', async () => {
+      (configService.get as jest.Mock).mockImplementation(<T>(key: string, def?: T): T => {
+        if (key === 'runtime.monitoringNumber') {
+          return '628555000111' as T;
+        }
+        return def as T;
+      });
+      const callbacks = await startAndCapture();
+      mockEngine.sendTextMessage.mockClear();
+
+      callbacks.onReady?.('628123', 'Tester');
+      await new Promise(resolve => setImmediate(resolve));
+
+      expect(mockEngine.sendTextMessage).toHaveBeenCalledWith(
+        '628555000111@c.us',
+        expect.stringContaining('[OpenWA] Session connected'),
+      );
+      expect(mockEngine.sendTextMessage).toHaveBeenCalledWith(
+        '628555000111@c.us',
+        expect.stringContaining('Session: test-session'),
+      );
+    });
+
+    it('labels the monitoring message as reconnected when the session was already authenticated before start', async () => {
+      (configService.get as jest.Mock).mockImplementation(<T>(key: string, def?: T): T => {
+        if (key === 'runtime.monitoringNumber') {
+          return '628555000111' as T;
+        }
+        return def as T;
+      });
+      (repository.findOne as jest.Mock).mockResolvedValue(
+        createMockSession({ phone: '628000111222', connectedAt: new Date(), status: SessionStatus.DISCONNECTED }),
+      );
+      (repository.update as jest.Mock).mockResolvedValue({ affected: 1 });
+
+      await service.start('sess-uuid-1');
+      const calls = mockEngine.initialize.mock.calls as [EngineEventCallbacks][];
+      const callbacks = calls[0][0];
+      mockEngine.sendTextMessage.mockClear();
+
+      callbacks.onReady?.('628123', 'Tester');
+      await new Promise(resolve => setImmediate(resolve));
+
+      expect(mockEngine.sendTextMessage).toHaveBeenCalledWith(
+        '628555000111@c.us',
+        expect.stringContaining('[OpenWA] Session reconnected'),
+      );
+    });
+
     it('bridges session.disconnected (with reason) to the socket from the live engine', async () => {
       const callbacks = await startAndCapture();
       // The live onDisconnected handler schedules a reconnect timer after emitting; neutralize
@@ -1254,6 +1310,29 @@ describe('SessionService', () => {
         reaction: '👍',
         reactions: { alice: '👍' },
       });
+    });
+
+    it('dispatches presence.update to webhook and WS when the engine reports inbound typing', async () => {
+      const callbacks = await startAndCaptureCallbacks();
+      const event: PresenceUpdateEvent = {
+        chatId: 'peer@c.us',
+        participantId: 'peer@c.us',
+        state: 'typing',
+        isGroup: false,
+        rawState: 'composing',
+        timestamp: 1706868000,
+      };
+
+      callbacks.onPresenceUpdate!(event);
+      await flush();
+
+      const dispatched = dispatchedEvents('presence.update');
+      expect(dispatched).toHaveLength(1);
+      expect(dispatched[0][2]).toMatchObject(event);
+      expect(eventsGateway.emitPresenceUpdate as jest.Mock).toHaveBeenCalledWith(
+        'sess-uuid-1',
+        expect.objectContaining(event),
+      );
     });
 
     it('dispatches message.received (not message.sent) on an incoming message event', async () => {

@@ -617,6 +617,29 @@ describe('BaileysAdapter messaging', () => {
     await expect(adapter.sendChatState('628111@s.whatsapp.net', 'typing')).resolves.toBeUndefined();
   });
 
+  it('maps a Baileys presence.update composing event to an inbound typing callback', async () => {
+    const onPresenceUpdate = jest.fn();
+    const adapter = newAdapter();
+    await adapter.initialize(noopCallbacks({ onPresenceUpdate }));
+
+    fakeSock.fire('presence.update', {
+      id: '628111@s.whatsapp.net',
+      presences: {
+        '628111@s.whatsapp.net': { lastKnownPresence: 'composing' },
+      },
+    });
+
+    expect(onPresenceUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        chatId: '628111@c.us',
+        participantId: '628111@c.us',
+        state: 'typing',
+        rawState: 'composing',
+        isGroup: false,
+      }),
+    );
+  });
+
   it('messaging methods throw EngineNotReadyError before the connection is open', async () => {
     const adapter = newAdapter();
     await adapter.initialize({});

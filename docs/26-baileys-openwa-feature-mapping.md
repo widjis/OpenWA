@@ -16,50 +16,50 @@ It focuses on:
 
 ## 26.2 Status Legend
 
-| Status | Meaning |
-| --- | --- |
-| **Exposed** | Available through a public OpenWA surface (REST API, webhook, WebSocket, or SDK). |
-| **Partial** | Supported in a narrower or normalized form, or with engine-specific limitations. |
+| Status          | Meaning                                                                                         |
+| --------------- | ----------------------------------------------------------------------------------------------- |
+| **Exposed**     | Available through a public OpenWA surface (REST API, webhook, WebSocket, or SDK).               |
+| **Partial**     | Supported in a narrower or normalized form, or with engine-specific limitations.                |
 | **Not Exposed** | Potentially available inside the engine/library, but not available as a public OpenWA contract. |
 
 ---
 
 ## 26.3 Feature Mapping Table
 
-| Baileys / WhatsApp Capability | OpenWA Status | OpenWA Surface | Notes |
-| --- | --- | --- | --- |
-| Session create / start / stop / delete | **Exposed** | REST / SDK / Dashboard | First-class session lifecycle management. |
-| QR login | **Exposed** | REST / WebSocket / Dashboard | QR retrieval is part of the public session flow. |
-| Phone-number pairing code | **Exposed** | REST / SDK / Dashboard | Supported as an alternative to QR. |
-| Send text message | **Exposed** | REST / SDK | Core messaging feature. |
-| Send media (image, video, audio, document, sticker) | **Exposed** | REST / SDK | Public API covers common outbound media operations. |
-| Send location / contact card | **Exposed** | REST / SDK | Available as normalized messaging actions. |
-| Reply / forward / react / delete message | **Exposed** | REST / SDK | Exposed as high-level message actions. |
-| Outgoing delivery ack updates | **Exposed** | Webhook / WebSocket | Normalized to OpenWA delivery-status events. |
-| Incoming message events | **Exposed** | Webhook / WebSocket | Primary event contract for inbound automation. |
-| Message reaction events | **Exposed** | Webhook / WebSocket | Exposed as normalized reaction events. |
-| Message revoke / delete events | **Exposed** | Webhook / WebSocket | Available as revoked-message events. |
-| Chat list / recent chats | **Exposed** | REST / SDK | Public chat listing is available. |
-| Mark chat read / unread | **Exposed** | REST / SDK | Public chat-state operations. |
-| Delete chat from chat list | **Exposed** | REST / SDK | Public endpoint exists. |
-| Send typing / recording / paused state | **Exposed** | REST / SDK | OpenWA exposes this as `sendChatState`. |
-| Simulated typing before send | **Exposed** | Config / runtime behavior | Built-in best-effort humanizing delay before single sends. |
-| Contacts list / lookup / existence check | **Exposed** | REST / SDK | Public contact operations are available. |
-| Profile picture lookup | **Exposed** | REST / SDK | Exposed as a normalized contact action. |
-| Group list / group metadata | **Exposed** | REST / SDK | Public group operations are available. |
-| Group management (create, participants, subject, description, invite) | **Exposed** | REST / SDK | High-level group administration is supported. |
-| History sync available to the engine | **Partial** | REST / local persistence | OpenWA exposes stored/history views, but not every raw history-sync primitive. |
-| Full raw Baileys message payloads | **Not Exposed** | None | OpenWA normalizes payloads into engine-agnostic message DTOs. |
-| Raw socket / event bus access | **Not Exposed** | None | OpenWA intentionally hides engine internals behind its service boundary. |
-| Presence updates from other users (`presence.update`) | **Not Exposed** | None | There is no public `presence.update` event contract. |
-| Typing detection from other users | **Not Exposed** | None | Outbound typing is supported; inbound typing observation is not publicly exposed. |
-| Online / offline presence observation | **Not Exposed** | None | No public presence-watch API or event stream. |
-| Contact-update realtime events | **Not Exposed** | None | Internal engine updates may exist, but OpenWA does not publish `contact.update`. |
-| Chat-update realtime deltas | **Not Exposed** | None | Internal synchronization exists, but there is no raw public chat-delta stream. |
-| Low-level Baileys connection events | **Partial** | WebSocket / Webhook / session status | OpenWA exposes session lifecycle states, not all native transport-level events. |
-| Engine-specific JID dialect details | **Not Exposed** | None | OpenWA normalizes ids to a neutral dialect where possible. |
-| Status / stories posting | **Partial** | REST / SDK | Available, but engine-limited; some operations are Baileys-only. |
-| Labels / catalog / channels | **Partial** | REST / SDK | Publicly exposed, but availability depends on account type and engine support. |
+| Baileys / WhatsApp Capability                                         | OpenWA Status   | OpenWA Surface                       | Notes                                                                                                                       |
+| --------------------------------------------------------------------- | --------------- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| Session create / start / stop / delete                                | **Exposed**     | REST / SDK / Dashboard               | First-class session lifecycle management.                                                                                   |
+| QR login                                                              | **Exposed**     | REST / WebSocket / Dashboard         | QR retrieval is part of the public session flow.                                                                            |
+| Phone-number pairing code                                             | **Exposed**     | REST / SDK / Dashboard               | Supported as an alternative to QR.                                                                                          |
+| Send text message                                                     | **Exposed**     | REST / SDK                           | Core messaging feature.                                                                                                     |
+| Send media (image, video, audio, document, sticker)                   | **Exposed**     | REST / SDK                           | Public API covers common outbound media operations.                                                                         |
+| Send location / contact card                                          | **Exposed**     | REST / SDK                           | Available as normalized messaging actions.                                                                                  |
+| Reply / forward / react / delete message                              | **Exposed**     | REST / SDK                           | Exposed as high-level message actions.                                                                                      |
+| Outgoing delivery ack updates                                         | **Exposed**     | Webhook / WebSocket                  | Normalized to OpenWA delivery-status events.                                                                                |
+| Incoming message events                                               | **Exposed**     | Webhook / WebSocket                  | Primary event contract for inbound automation.                                                                              |
+| Message reaction events                                               | **Exposed**     | Webhook / WebSocket                  | Exposed as normalized reaction events.                                                                                      |
+| Message revoke / delete events                                        | **Exposed**     | Webhook / WebSocket                  | Available as revoked-message events.                                                                                        |
+| Chat list / recent chats                                              | **Exposed**     | REST / SDK                           | Public chat listing is available.                                                                                           |
+| Mark chat read / unread                                               | **Exposed**     | REST / SDK                           | Public chat-state operations.                                                                                               |
+| Delete chat from chat list                                            | **Exposed**     | REST / SDK                           | Public endpoint exists.                                                                                                     |
+| Send typing / recording / paused state                                | **Exposed**     | REST / SDK                           | OpenWA exposes this as `sendChatState`.                                                                                     |
+| Simulated typing before send                                          | **Exposed**     | Config / runtime behavior            | Built-in best-effort humanizing delay before single sends.                                                                  |
+| Contacts list / lookup / existence check                              | **Exposed**     | REST / SDK                           | Public contact operations are available.                                                                                    |
+| Profile picture lookup                                                | **Exposed**     | REST / SDK                           | Exposed as a normalized contact action.                                                                                     |
+| Group list / group metadata                                           | **Exposed**     | REST / SDK                           | Public group operations are available.                                                                                      |
+| Group management (create, participants, subject, description, invite) | **Exposed**     | REST / SDK                           | High-level group administration is supported.                                                                               |
+| History sync available to the engine                                  | **Partial**     | REST / local persistence             | OpenWA exposes stored/history views, but not every raw history-sync primitive.                                              |
+| Full raw Baileys message payloads                                     | **Not Exposed** | None                                 | OpenWA normalizes payloads into engine-agnostic message DTOs.                                                               |
+| Raw socket / event bus access                                         | **Not Exposed** | None                                 | OpenWA intentionally hides engine internals behind its service boundary.                                                    |
+| Presence updates from other users (`presence.update`)                 | **Exposed**     | WebSocket / Webhook                  | OpenWA publishes a normalized `presence.update` event when the active engine provides presence updates (currently Baileys). |
+| Typing detection from other users                                     | **Partial**     | WebSocket / Webhook                  | Available through `presence.update` with `state: "typing"` on Baileys; other engines may not emit it.                       |
+| Online / offline presence observation                                 | **Partial**     | WebSocket / Webhook                  | Available through `presence.update` with `state: "available"` / `"unavailable"` on Baileys.                                 |
+| Contact-update realtime events                                        | **Not Exposed** | None                                 | Internal engine updates may exist, but OpenWA does not publish `contact.update`.                                            |
+| Chat-update realtime deltas                                           | **Not Exposed** | None                                 | Internal synchronization exists, but there is no raw public chat-delta stream.                                              |
+| Low-level Baileys connection events                                   | **Partial**     | WebSocket / Webhook / session status | OpenWA exposes session lifecycle states, not all native transport-level events.                                             |
+| Engine-specific JID dialect details                                   | **Not Exposed** | None                                 | OpenWA normalizes ids to a neutral dialect where possible.                                                                  |
+| Status / stories posting                                              | **Partial**     | REST / SDK                           | Available, but engine-limited; some operations are Baileys-only.                                                            |
+| Labels / catalog / channels                                           | **Partial**     | REST / SDK                           | Publicly exposed, but availability depends on account type and engine support.                                              |
 
 ---
 
@@ -67,7 +67,7 @@ It focuses on:
 
 ### Presence And Typing
 
-OpenWA **does expose outbound typing/recording/paused** to a specific chat, but it does **not** expose the inbound presence stream that many direct Baileys integrations use for:
+OpenWA **does expose outbound typing/recording/paused** to a specific chat, and now also exposes inbound presence updates when the active engine supports them (currently Baileys). This covers:
 
 - detecting whether a user is currently typing
 - detecting whether a user is online or offline
@@ -76,7 +76,7 @@ OpenWA **does expose outbound typing/recording/paused** to a specific chat, but 
 For migrations, this means:
 
 - If your current Baileys app only **sends** typing indicators, OpenWA is sufficient.
-- If your current Baileys app **observes** typing or presence from other users, this is currently a gap.
+- If your current Baileys app **observes** typing or presence from other users, OpenWA now covers that on the Baileys engine via `presence.update`.
 
 ### Raw Event Access
 
@@ -150,7 +150,7 @@ The mapping above is based on the current documented and implemented OpenWA surf
 - Public typing state endpoint exists in `POST /api/sessions/:id/chats/typing`
 - `SIMULATE_TYPING` exists as a built-in send behavior
 - The engine callback contract includes message / ack / reaction / revoked / session-state signals, but not a general `onPresence`
-- The API specification explicitly states that `presence.update` and `contact.update` are not emitted as public events
+- The API specification now documents `presence.update` as a public event on supported engines (currently Baileys); `contact.update` remains unexposed
 - Some Status operations are documented as Baileys-only
 
 ---

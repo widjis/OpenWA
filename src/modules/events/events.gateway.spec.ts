@@ -269,6 +269,27 @@ describe('EventsGateway.emitToRooms fan-out', () => {
       ]),
     );
   });
+
+  it('emits presence.update to the specific and wildcard rooms', () => {
+    const gateway = gw();
+    const { server, emit, rooms } = makeCapturingServer();
+    (gateway as unknown as { server: unknown }).server = server;
+
+    gateway.emitPresenceUpdate('sess-1', { chatId: 'peer@c.us', state: 'typing' });
+
+    expect(emit).toHaveBeenCalledTimes(1);
+    const [channel, message] = emit.mock.calls[0] as [string, WSEventMessage];
+    expect(channel).toBe('message');
+    expect(message.payload.event).toBe('presence.update');
+    expect(new Set(rooms)).toEqual(
+      new Set([
+        buildRoomName('sess-1', 'presence.update'),
+        buildRoomName('sess-1', '*'),
+        buildRoomName('*', 'presence.update'),
+        buildRoomName('*', '*'),
+      ]),
+    );
+  });
 });
 
 describe('event catalog ⇔ emitter invariants (drift guard)', () => {

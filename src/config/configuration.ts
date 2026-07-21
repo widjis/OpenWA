@@ -91,6 +91,12 @@ export default () => ({
     maxConcurrent: parseInt(process.env.MAX_CONCURRENT_SESSIONS || '0', 10),
   },
 
+  runtime: {
+    resolveLidToPhone: process.env.RESOLVE_LID_TO_PHONE === 'true',
+    enableSwagger: process.env.ENABLE_SWAGGER === 'true',
+    monitoringNumber: process.env.MONITORING_NUMBER?.trim() || '',
+  },
+
   // Webhook configuration
   webhook: {
     timeout: parseInt(process.env.WEBHOOK_TIMEOUT || '10000', 10),

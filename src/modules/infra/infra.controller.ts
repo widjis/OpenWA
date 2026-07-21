@@ -36,6 +36,7 @@ interface InfraStatus {
   runtime: {
     resolveLidToPhone: boolean;
     enableSwagger: boolean;
+    monitoringNumber: string;
   };
   webhookSecurity: {
     ssrfProtect: boolean;
@@ -58,6 +59,7 @@ interface SaveConfigDto {
   runtime?: {
     resolveLidToPhone?: boolean;
     enableSwagger?: boolean;
+    monitoringNumber?: string;
   };
   webhook?: {
     ssrfProtect?: boolean;
@@ -218,6 +220,7 @@ interface SavedConfigResponse {
   runtime: {
     resolveLidToPhone: boolean;
     enableSwagger: boolean;
+    monitoringNumber: string;
   };
   webhook: {
     ssrfProtect: boolean;
@@ -288,6 +291,10 @@ export class InfraController {
     const queueEnabled = this.configService.get<boolean>('queue.enabled', false);
     const resolveLidToPhone = process.env.RESOLVE_LID_TO_PHONE === 'true';
     const enableSwagger = process.env.ENABLE_SWAGGER === 'true';
+    const monitoringNumber = this.configService.get<string>(
+      'runtime.monitoringNumber',
+      process.env.MONITORING_NUMBER || '',
+    );
     const webhookSsrfProtect = process.env.WEBHOOK_SSRF_PROTECT !== 'false';
     const webhookAllowedHosts = process.env.SSRF_ALLOWED_HOSTS || '';
 
@@ -373,6 +380,7 @@ export class InfraController {
       runtime: {
         resolveLidToPhone,
         enableSwagger,
+        monitoringNumber,
       },
       webhookSecurity: {
         ssrfProtect: webhookSsrfProtect,
@@ -443,6 +451,7 @@ export class InfraController {
       runtime: {
         resolveLidToPhone: saved.RESOLVE_LID_TO_PHONE === 'true',
         enableSwagger: saved.ENABLE_SWAGGER === 'true',
+        monitoringNumber: saved.MONITORING_NUMBER || '',
       },
       webhook: {
         ssrfProtect: saved.WEBHOOK_SSRF_PROTECT !== 'false',
@@ -517,6 +526,11 @@ export class InfraController {
       if (config.runtime) {
         updates.RESOLVE_LID_TO_PHONE = config.runtime.resolveLidToPhone ? 'true' : 'false';
         updates.ENABLE_SWAGGER = config.runtime.enableSwagger ? 'true' : 'false';
+        if ('monitoringNumber' in config.runtime) {
+          const monitoringNumber = config.runtime.monitoringNumber?.trim() || '';
+          if (monitoringNumber) updates.MONITORING_NUMBER = monitoringNumber;
+          else staleKeys.add('MONITORING_NUMBER');
+        }
       }
 
       if (config.webhook) {

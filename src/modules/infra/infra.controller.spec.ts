@@ -253,9 +253,12 @@ describe('InfraController.saveConfig env-name correctness and merge (#226)', () 
   });
 
   it('persists runtime settings managed from Infrastructure', () => {
-    const env = written({ runtime: { resolveLidToPhone: true, enableSwagger: true } });
+    const env = written({
+      runtime: { resolveLidToPhone: true, enableSwagger: true, monitoringNumber: '628123456789' },
+    });
     expect(env).toContain('RESOLVE_LID_TO_PHONE=true');
     expect(env).toContain('ENABLE_SWAGGER=true');
+    expect(env).toContain('MONITORING_NUMBER=628123456789');
   });
 
   it('persists webhook SSRF settings for local/internal webhook allowlists', () => {
@@ -673,7 +676,7 @@ describe('InfraController.getConfig (#226)', () => {
   it('returns the saved config shape without echoing secrets', () => {
     (fs.existsSync as jest.Mock).mockReturnValue(true);
     (fs.readFileSync as jest.Mock).mockReturnValue(
-      'DATABASE_TYPE=postgres\nDATABASE_HOST=db\nDATABASE_PASSWORD=secret\nSESSION_DATA_PATH=./sess\nENGINE_TYPE=baileys\nSTORAGE_TYPE=s3\nS3_ACCESS_KEY_ID=ak\nS3_SECRET_ACCESS_KEY=sk\nRESOLVE_LID_TO_PHONE=true\nENABLE_SWAGGER=true\nWEBHOOK_SSRF_PROTECT=false\nSSRF_ALLOWED_HOSTS=localhost,127.0.0.1,10.60.20.233\n',
+      'DATABASE_TYPE=postgres\nDATABASE_HOST=db\nDATABASE_PASSWORD=secret\nSESSION_DATA_PATH=./sess\nENGINE_TYPE=baileys\nSTORAGE_TYPE=s3\nS3_ACCESS_KEY_ID=ak\nS3_SECRET_ACCESS_KEY=sk\nRESOLVE_LID_TO_PHONE=true\nENABLE_SWAGGER=true\nMONITORING_NUMBER=628123456789\nWEBHOOK_SSRF_PROTECT=false\nSSRF_ALLOWED_HOSTS=localhost,127.0.0.1,10.60.20.233\n',
     );
     const controller = new InfraController(
       {} as never,
@@ -699,6 +702,7 @@ describe('InfraController.getConfig (#226)', () => {
     expect(cfg.storage.s3CredentialsSet).toBe(true);
     expect(cfg.runtime.resolveLidToPhone).toBe(true);
     expect(cfg.runtime.enableSwagger).toBe(true);
+    expect(cfg.runtime.monitoringNumber).toBe('628123456789');
     expect(cfg.webhook.ssrfProtect).toBe(false);
     expect(cfg.webhook.allowedHosts).toBe('localhost,127.0.0.1,10.60.20.233');
     // Secrets are never present on the returned object.

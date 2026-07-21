@@ -92,6 +92,23 @@ describe('configuration — Postgres pool timeouts', () => {
   });
 });
 
+describe('configuration — runtime monitoring number', () => {
+  const orig = process.env.MONITORING_NUMBER;
+
+  afterEach(() => {
+    if (orig === undefined) delete process.env.MONITORING_NUMBER;
+    else process.env.MONITORING_NUMBER = orig;
+  });
+
+  it('reads MONITORING_NUMBER into runtime.monitoringNumber', () => {
+    delete process.env.MONITORING_NUMBER;
+    expect(configuration().runtime.monitoringNumber).toBe('');
+
+    process.env.MONITORING_NUMBER = '628123456789';
+    expect(configuration().runtime.monitoringNumber).toBe('628123456789');
+  });
+});
+
 describe('configuration — plugin download cap is fail-safe', () => {
   const orig = process.env.PLUGIN_DOWNLOAD_MAX_BYTES;
   afterEach(() => {

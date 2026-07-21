@@ -27,6 +27,8 @@ import {
   PaginatedProducts,
   Product,
   ProductQueryOptions,
+  PresenceState,
+  PresenceUpdateEvent,
   ReactionEvent,
   RevokedMessage,
   Status,
@@ -282,6 +284,54 @@ export class BaileysAdapter implements IWhatsAppEngine {
     });
     // WhatsApp pushes this when a lid contact shares its phone number - a direct lid->phone pair.
     sock.ev.on('chats.phoneNumberShare', ({ lid, jid }) => this.sessionStore.addLidMappings([{ lid, pn: jid }]));
+    sock.ev.on('presence.update', update => this.handlePresenceUpdate(update));
+  }
+
+  private mapPresenceState(state: unknown): PresenceState | null {
+    switch (state) {
+      case 'composing':
+        return 'typing';
+      case 'recording':
+        return 'recording';
+      case 'paused':
+        return 'paused';
+      case 'available':
+        return 'available';
+      case 'unavailable':
+        return 'unavailable';
+      default:
+        return null;
+    }
+  }
+
+  private handlePresenceUpdate(update: {
+    id?: string;
+    presences?: Record<string, { lastKnownPresence?: string }>;
+  }): void {
+    const chatId = update?.id ? this.sessionStore.toNeutralJid(update.id) : null;
+    if (!chatId || !update.presences || typeof update.presences !== 'object') {
+      return;
+    }
+
+    const isGroup = chatId.endsWith('@g.us');
+    const timestamp = Math.floor(Date.now() / 1000);
+
+    for (const [participant, presence] of Object.entries(update.presences)) {
+      const state = this.mapPresenceState(presence?.lastKnownPresence);
+      if (!state) {
+        continue;
+      }
+
+      const event: PresenceUpdateEvent = {
+        chatId,
+        participantId: this.sessionStore.toNeutralJid(participant),
+        state,
+        isGroup,
+        rawState: presence?.lastKnownPresence,
+        timestamp,
+      };
+      this.callbacks.onPresenceUpdate?.(event);
+    }
   }
 
   private handleConnectionUpdate(update: {

@@ -336,6 +336,14 @@ export interface ChatSummary {
 export type ChatState = 'typing' | 'recording' | 'paused';
 
 /**
+ * Engine-neutral inbound presence state observed from another participant.
+ * `typing` / `recording` are the two meaningful transient states for agent UX;
+ * `paused` means the participant stopped an active composing/recording action;
+ * `available` / `unavailable` preserve coarse online presence when an engine provides it.
+ */
+export type PresenceState = ChatState | 'available' | 'unavailable';
+
+/**
  * Engine-neutral message delivery status. Each adapter maps its native delivery signal
  * (e.g. whatsapp-web.js MessageAck integers, Baileys WAMessageStatus) to this vocabulary,
  * so no consumer outside the adapter sees engine-specific ack codes.
@@ -378,6 +386,18 @@ export interface ReactionEvent {
   senderId: string;
 }
 
+export interface PresenceUpdateEvent {
+  chatId: string;
+  participantId: string;
+  state: PresenceState;
+  /** True when the observed presence is for a group participant inside `chatId`. */
+  isGroup: boolean;
+  /** Raw engine presence token for troubleshooting/mapping drift. */
+  rawState?: string;
+  /** Best-effort event time in Unix seconds. */
+  timestamp: number;
+}
+
 export interface EngineEventCallbacks {
   onQRCode?: (qr: string) => void;
   onReady?: (phone: string, pushName: string) => void;
@@ -394,6 +414,7 @@ export interface EngineEventCallbacks {
   onMessageAck?: (messageId: string, status: DeliveryStatus) => void;
   onMessageRevoked?: (message: RevokedMessage) => void;
   onMessageReaction?: (event: ReactionEvent) => void;
+  onPresenceUpdate?: (event: PresenceUpdateEvent) => void;
   /**
    * Bulk historical messages from an engine's initial sync (e.g. Baileys `messaging-history.set`).
    * They predate the live session, so consumers persist them for the chat view but must not dispatch.

@@ -95,6 +95,7 @@ const availableEventNames = [
   'message.failed',
   'message.revoked',
   'message.reaction',
+  'presence.update',
   'session.status',
   'session.qr',
   'session.authenticated',

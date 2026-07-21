@@ -39,6 +39,7 @@ export const WEBHOOK_EVENTS = [
   'message.failed',
   'message.revoked',
   'message.reaction',
+  'presence.update',
   'session.status',
   'session.qr',
   'session.authenticated',
